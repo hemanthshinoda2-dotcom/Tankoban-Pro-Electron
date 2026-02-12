@@ -29,3 +29,6 @@ The sensitive entry files are:
 - `app/video_scan_worker.js`
 
 Next: `docs/01_ARCHITECTURE_OVERVIEW.md`.
+
+
+Release gate: use `../RELEASE_CHECKLIST.md` for objective pass/fail criteria before publishing releases.

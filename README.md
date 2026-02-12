@@ -1,27 +1,37 @@
 # Tankoban Pro Electron
 
-## Windows setup
+Tankoban Pro Electron is a **Windows-first desktop app** for managing and reading manga/comic archives and video libraries.
 
-1. Run `install_and_run.bat` to install dependencies and launch the app.
-2. Run `build_windows_exe.bat` to build distributables.
+## Use prebuilt release (recommended)
 
-Both scripts automatically download MPV runtime files into `app/resources/mpv/windows` when missing.
+If you only want to run the app, use the packaged release instead of building locally.
 
-### MPV download troubleshooting (proxy / offline / rate-limit)
+1. Go to the project Releases page and download the latest Windows release asset.
+2. Extract the package to a normal user-writable folder (for example: `C:\Apps\TankobanPro`).
+3. Run the packaged executable.
 
-If automatic MPV download fails in a restricted environment:
+For user-focused install notes, see the [User Release Guide](docs/USER_RELEASE_GUIDE.md).
 
-- Manual placement target: `app/resources/mpv/windows`
-- Required files: `mpv.exe` and one of `libmpv-2.dll` / `mpv-2.dll` / `mpv-1.dll`
-- Use a local archive directly:
-  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/download_mpv_windows.ps1 -ArchivePath C:\path\to\mpv-x86_64-*.7z`
-- Optional checksum verification:
-  - add `-ArchiveSha256 <sha256>`
-  - or set `TANKOBAN_MPV_ARCHIVE_SHA256`
+## Build from source
 
-Environment variable alternatives:
+If you want to develop, debug, or package custom builds, use the contributor setup:
 
-- `TANKOBAN_MPV_ARCHIVE_PATH` (or `MPV_ARCHIVE_PATH`)
-- `TANKOBAN_MPV_ARCHIVE_SHA256` (or `MPV_ARCHIVE_SHA256`)
+- [CONTRIBUTING.md](CONTRIBUTING.md) (source build + dev workflow)
+- [Documentation Index](docs/README.md) (architecture and internal documentation)
 
-For more detail, see `app/resources/mpv/windows/README.md`.
+## Support scope
+
+This project is currently scoped for **Windows only**.
+
+- **Supported OS:** Windows 10 and Windows 11.
+- **Actively tested on:** Windows 11 developer environments.
+- **Known limitations:**
+  - Linux and macOS are not officially supported.
+  - Build and runtime helper scripts are batch/PowerShell-first.
+  - Some flows assume local Windows media tooling behavior.
+
+## Audience quick links
+
+- End users: [User Release Guide](docs/USER_RELEASE_GUIDE.md)
+- Contributors/developers: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Architecture deep dive: [Documentation Index](docs/README.md)
