@@ -66,6 +66,13 @@ From the `app/` folder:
 npm run smoke
 ```
 
+## Environment and setup requirements
+
+Canonical setup requirements live in the repository root README.
+
+- See `../README.md#system-requirements` for supported Windows/Node/Python versions and MPV internet requirement.
+- See `../README.md#first-run-quickstart-windows` and `../README.md#first-run-troubleshooting` for first-run steps and fixes.
+
 ## Operating system assumption
 
 This repository line targets Windows only.
