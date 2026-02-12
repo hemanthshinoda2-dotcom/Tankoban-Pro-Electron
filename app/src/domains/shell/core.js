@@ -2598,6 +2598,48 @@ function setReaderMode(next) {
   }
 
 
+// Minimal initial boot flow (library-first). Reader domain stays deferred until first openBook().
+if (!window.__tankoInitialBootStarted) {
+  window.__tankoInitialBootStarted = true;
+  refreshLibrary().then(async () => {
+    bootReady = true;
+
+    // Prefer OS/DnD open over openBookId query when present.
+    const openedExternal = await flushPendingExternalOpen();
+    if (openedExternal) return;
+
+    // Reader window startup support remains, but reader scripts are loaded lazily.
+    const openId = (new URLSearchParams(window.location.search)).get('openBookId');
+    if (!openId) return;
+
+    const b =
+      bookById.get(openId) ||
+      bookByIdExtra.get(openId) ||
+      (() => {
+        const p = appState.progressAll?.[openId];
+        const m = p?.bookMeta;
+        if (!m?.path) return null;
+        return { id: openId, title: m.title || '—', series: m.series || '', seriesId: m.seriesId || '', path: m.path };
+      })();
+
+    if (b?.path) {
+      try { await openBook(b); } catch { toast('Failed to open in new window'); }
+    } else {
+      toast('Volume not found');
+    }
+  }).catch(err => toast(String(err))).finally(() => {
+    try {
+      const bt = window.Tanko && window.Tanko.bootTiming;
+      if (bt && bt.initialBootDoneMs == null) {
+        const now = (typeof performance !== 'undefined' && performance?.now) ? performance.now() : Date.now();
+        bt.initialBootDoneMs = Math.round(now - Number(bt.initialStartMs || now));
+        console.log(`[boot-timing] initial boot complete in ${bt.initialBootDoneMs}ms`);
+      }
+    } catch {}
+  });
+}
+
+
 // Phase 7: Single renderer state namespace (read-only references; no behavior impact)
 try {
   window.Tanko = window.Tanko || {};
