@@ -760,9 +760,134 @@ Hot search tokens:
   // -----------------------------
 
   let globalSearchItems = [];
+  let librarySearchIndex = null;
+  let librarySearchIndexGeneration = 0;
 
   function normKey(s) {
     return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  }
+
+  function tokenizeNorm(s) {
+    const n = normKey(s);
+    if (!n) return [];
+    const words = String(s || '').toLowerCase().split(/[^a-z0-9]+/g).filter(Boolean);
+    return words.length ? words : [n];
+  }
+
+  function indexAddPosting(map, key, id) {
+    if (!key) return;
+    let bucket = map.get(key);
+    if (!bucket) { bucket = new Set(); map.set(key, bucket); }
+    bucket.add(id);
+  }
+
+  function rebuildLibrarySearchIndex() {
+    librarySearchIndexGeneration += 1;
+    const gen = librarySearchIndexGeneration;
+    const series = Array.isArray(appState?.library?.series) ? appState.library.series : [];
+    const books = Array.isArray(appState?.library?.books) ? appState.library.books : [];
+
+    const next = {
+      generation: gen,
+      seriesEntries: [],
+      bookEntries: [],
+      seriesById: new Map(),
+      booksById: new Map(),
+      seriesTokenMap: new Map(),
+      seriesPrefixMap: new Map(),
+      bookTokenMap: new Map(),
+      bookPrefixMap: new Map(),
+    };
+
+    for (const s of series) {
+      const id = String(s?.id || '');
+      if (!id) continue;
+      const nameNorm = String(s?.name || '').toLowerCase();
+      const pathNorm = String(s?.path || '').toLowerCase();
+      const tokens = new Set([...tokenizeNorm(s?.name), ...tokenizeNorm(s?.path)]);
+      const entry = { id, item: s, nameNorm, pathNorm, tokens };
+      next.seriesEntries.push(entry);
+      next.seriesById.set(id, entry);
+      for (const t of tokens) {
+        indexAddPosting(next.seriesTokenMap, t, id);
+        const max = Math.min(12, t.length);
+        for (let i = 1; i <= max; i++) indexAddPosting(next.seriesPrefixMap, t.slice(0, i), id);
+      }
+    }
+
+    for (const b of books) {
+      const id = String(b?.id || '');
+      if (!id) continue;
+      const titleNorm = String(b?.title || '').toLowerCase();
+      const seriesNorm = String(b?.series || '').toLowerCase();
+      const pathNorm = String(b?.path || '').toLowerCase();
+      const fileNorm = (String(b?.path || '').split(/[\\/]/).pop() || '').toLowerCase();
+      const tokens = new Set([
+        ...tokenizeNorm(b?.title),
+        ...tokenizeNorm(b?.series),
+        ...tokenizeNorm(fileNorm),
+        ...tokenizeNorm(b?.path),
+      ]);
+      const entry = { id, item: b, titleNorm, seriesNorm, fileNorm, pathNorm, tokens };
+      next.bookEntries.push(entry);
+      next.booksById.set(id, entry);
+      for (const t of tokens) {
+        indexAddPosting(next.bookTokenMap, t, id);
+        const max = Math.min(12, t.length);
+        for (let i = 1; i <= max; i++) indexAddPosting(next.bookPrefixMap, t.slice(0, i), id);
+      }
+    }
+
+    librarySearchIndex = next;
+  }
+
+  function intersectPostingSets(sets) {
+    if (!sets.length) return null;
+    const sorted = sets.slice().sort((a, b) => a.size - b.size);
+    const out = new Set(sorted[0]);
+    for (let i = 1; i < sorted.length; i++) {
+      const cur = sorted[i];
+      for (const id of out) if (!cur.has(id)) out.delete(id);
+      if (!out.size) break;
+    }
+    return out;
+  }
+
+  function searchIndexedEntries({ query, tokenMap, prefixMap, byId, rank, limit }) {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return [];
+    const qTokens = q.split(/[^a-z0-9]+/g).map(t => t.trim()).filter(Boolean);
+    const postingSets = [];
+    for (const t of qTokens) {
+      const p = prefixMap.get(t) || tokenMap.get(t);
+      if (!p || !p.size) return [];
+      postingSets.push(p);
+    }
+    const candidates = intersectPostingSets(postingSets);
+    if (!candidates || !candidates.size) return [];
+
+    const top = [];
+    const hardCap = Math.max(limit * 3, limit + 8);
+    const pushTop = (row) => {
+      if (top.length < hardCap) {
+        top.push(row);
+        return;
+      }
+      let minIdx = 0;
+      for (let i = 1; i < top.length; i++) if (top[i].score < top[minIdx].score) minIdx = i;
+      if (row.score > top[minIdx].score) top[minIdx] = row;
+    };
+
+    for (const id of candidates) {
+      const entry = byId.get(id);
+      if (!entry) continue;
+      const score = rank(entry, q, qTokens);
+      if (score <= 0) continue;
+      pushTop({ id, entry, score });
+    }
+
+    top.sort((a, b) => b.score - a.score);
+    return top.slice(0, limit).map(x => x.entry.item);
   }
 
   function matchText(text, query) {
@@ -777,18 +902,42 @@ Hot search tokens:
   }
 
   function buildGlobalSearch(query) {
+    if (!librarySearchIndex) rebuildLibrarySearchIndex();
     const q = (query || '').trim();
     if (!q) return { series: [], books: [] };
 
-    const series = (appState.library.series || [])
-      .filter(s => matchText(s.name, q))
-      .sort((a, b) => naturalCompare(a.name, b.name))
-      .slice(0, 24);
+    const idx = librarySearchIndex;
+    const series = searchIndexedEntries({
+      query: q,
+      tokenMap: idx.seriesTokenMap,
+      prefixMap: idx.seriesPrefixMap,
+      byId: idx.seriesById,
+      limit: 24,
+      rank: (e, qNorm, qTokens) => {
+        let score = 0;
+        if (e.nameNorm.includes(qNorm)) score += 140;
+        if (e.pathNorm.includes(qNorm)) score += 35;
+        for (const t of qTokens) if (e.tokens.has(t)) score += 12;
+        return score;
+      },
+    }).sort((a, b) => naturalCompare(a.name, b.name));
 
-    const books = (appState.library.books || [])
-      .filter(b => matchText(b.title, q) || matchText(b.series, q))
-      .sort((a, b) => naturalCompare(a.title, b.title))
-      .slice(0, 80);
+    const books = searchIndexedEntries({
+      query: q,
+      tokenMap: idx.bookTokenMap,
+      prefixMap: idx.bookPrefixMap,
+      byId: idx.booksById,
+      limit: 80,
+      rank: (e, qNorm, qTokens) => {
+        let score = 0;
+        if (e.titleNorm.includes(qNorm)) score += 150;
+        if (e.seriesNorm.includes(qNorm)) score += 90;
+        if (e.fileNorm.includes(qNorm)) score += 80;
+        if (e.pathNorm.includes(qNorm)) score += 30;
+        for (const t of qTokens) if (e.tokens.has(t)) score += 10;
+        return score;
+      },
+    }).sort((a, b) => naturalCompare(a.title, b.title));
 
     return { series, books };
   }
@@ -920,5 +1069,5 @@ Hot search tokens:
     window.libraryHooks = window.libraryHooks || {};
     window.libraryHooks.renderLibrary = renderLibrary;
     window.libraryHooks.renderContinue = renderContinue;
+    window.libraryHooks.rebuildSearchIndex = rebuildLibrarySearchIndex;
   } catch {}
-
