@@ -539,7 +539,276 @@ Hot search tokens:
     }
   }
 
+  const volumeRenderState = {
+    cache: new Map(),
+    source: { booksRef: null, progressRef: null },
+    sorted: [],
+    selectedIndex: -1,
+    rowNodesById: new Map(),
+    viewport: { rowHeight: 38, bufferRows: 8, start: 0, end: -1, lastScrollTop: -1, lastViewportH: -1 },
+    handlersBound: false,
+  };
+
+  function clearVolumeCacheIfNeeded() {
+    const booksRef = appState.library?.books;
+    const progressRef = appState.progressAll;
+    if (volumeRenderState.source.booksRef !== booksRef || volumeRenderState.source.progressRef !== progressRef) {
+      volumeRenderState.cache.clear();
+      volumeRenderState.source = { booksRef, progressRef };
+    }
+  }
+
+  function getCachedVisibleVolumes({ sid, books, q, qNums, sortMode }) {
+    clearVolumeCacheIfNeeded();
+    const key = `${sid || ''}::${sortMode}::${q}`;
+    const cached = volumeRenderState.cache.get(key);
+    if (cached) return cached;
+
+    const getNum = (title) => {
+      const m = String(title).match(/\d+/);
+      return m ? parseInt(m[0], 10) : null;
+    };
+
+    const matchesSearch = (b) => {
+      if (!q) return true;
+      const t = String(b.title || '').toLowerCase();
+      if (t.includes(q)) return true;
+      if (qNums.length) {
+        const n = getNum(b.title);
+        if (Number.isFinite(n) && qNums.includes(n)) return true;
+        for (const nn of qNums) {
+          if (t.includes(String(nn))) return true;
+        }
+      }
+      return false;
+    };
+
+    const getLastRead = (id) => (appState.progressAll?.[id]?.updatedAt || 0);
+    const cmp = (a, b) => {
+      if (sortMode === 'alphabetical') {
+        return String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' });
+      }
+      if (sortMode === 'newest') {
+        return (b.mtimeMs || 0) - (a.mtimeMs || 0) || naturalCompare(a.title, b.title);
+      }
+      if (sortMode === 'lastread') {
+        return (getLastRead(b.id) - getLastRead(a.id)) || naturalCompare(a.title, b.title);
+      }
+      if (sortMode === 'numerical') {
+        const na = getNum(a.title);
+        const nb = getNum(b.title);
+        if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+        if (Number.isFinite(na) && !Number.isFinite(nb)) return -1;
+        if (!Number.isFinite(na) && Number.isFinite(nb)) return 1;
+        return naturalCompare(a.title, b.title);
+      }
+      return naturalCompare(a.title, b.title);
+    };
+
+    const sorted = [...books.filter(matchesSearch)].sort(cmp);
+    volumeRenderState.cache.set(key, sorted);
+    return sorted;
+  }
+
+  function ensureVolumeSelectionVisible() {
+    const { sorted, selectedIndex, viewport } = volumeRenderState;
+    if (!el.volumesGrid || selectedIndex < 0 || !sorted.length) return;
+    const top = selectedIndex * viewport.rowHeight;
+    const bottom = top + viewport.rowHeight;
+    const viewTop = el.volumesGrid.scrollTop;
+    const viewBottom = viewTop + el.volumesGrid.clientHeight;
+    if (top < viewTop) el.volumesGrid.scrollTop = top;
+    else if (bottom > viewBottom) el.volumesGrid.scrollTop = Math.max(0, bottom - el.volumesGrid.clientHeight);
+  }
+
+  function updateMountedSelection(prevId, nextId) {
+    if (prevId && prevId !== nextId) {
+      const prevNode = volumeRenderState.rowNodesById.get(prevId);
+      if (prevNode) prevNode.classList.remove('sel');
+    }
+    if (nextId) {
+      const nextNode = volumeRenderState.rowNodesById.get(nextId);
+      if (nextNode) nextNode.classList.add('sel');
+    }
+  }
+
+  function mountVolumeRows() {
+    if (!el.volumesGrid) return;
+    const state = volumeRenderState;
+    const total = state.sorted.length;
+    const viewportH = el.volumesGrid.clientHeight || 1;
+    const scrollTop = el.volumesGrid.scrollTop || 0;
+
+    const visibleCount = Math.max(1, Math.ceil(viewportH / state.viewport.rowHeight));
+    const start = Math.max(0, Math.floor(scrollTop / state.viewport.rowHeight) - state.viewport.bufferRows);
+    const end = Math.min(total - 1, start + visibleCount + (state.viewport.bufferRows * 2));
+
+    if (start === state.viewport.start && end === state.viewport.end && scrollTop === state.viewport.lastScrollTop && viewportH === state.viewport.lastViewportH) {
+      return;
+    }
+
+    state.viewport.start = start;
+    state.viewport.end = end;
+    state.viewport.lastScrollTop = scrollTop;
+    state.viewport.lastViewportH = viewportH;
+
+    const fmtBytes = (n) => {
+      const v = Number(n);
+      if (!Number.isFinite(v) || v <= 0) return '—';
+      const units = ['B','KB','MB','GB','TB'];
+      let x = v;
+      let u = 0;
+      while (x >= 1024 && u < units.length - 1) { x /= 1024; u++; }
+      const dp = (u <= 1) ? 0 : (u === 2 ? 1 : 2);
+      return `${x.toFixed(dp)} ${units[u]}`;
+    };
+
+    const fmtDate = (ms) => {
+      const d = new Date(ms);
+      if (!Number.isFinite(d.getTime())) return '—';
+      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
+    };
+
+    state.rowNodesById.clear();
+    const topSpacer = document.createElement('div');
+    topSpacer.style.height = `${start * state.viewport.rowHeight}px`;
+    const botSpacer = document.createElement('div');
+    botSpacer.style.height = `${Math.max(0, (total - end - 1) * state.viewport.rowHeight)}px`;
+
+    const frag = document.createDocumentFragment();
+    frag.appendChild(topSpacer);
+
+    for (let i = start; i <= end; i++) {
+      const b = state.sorted[i];
+      const p = appState.progressAll?.[b.id];
+      const fileName = (b.path || '').split(/[\\/]/).pop() || '—';
+      const size = fmtBytes(b.sizeBytes);
+      const read = p?.finished ? '✓' : '—';
+      const cur = (p && Number.isFinite(p.pageIndex)) ? String((p.pageIndex || 0) + 1) : '—';
+      const date = fmtDate(b.mtimeMs);
+
+      const row = document.createElement('div');
+      row.className = `volTrow${(i % 2) ? ' alt' : ''}${(b.id === appState.ui.volSelBookId) ? ' sel' : ''}`;
+      row.dataset.bookid = b.id;
+      row.dataset.rowidx = String(i);
+      row.innerHTML = `
+        <div class="cell num">${i + 1}</div>
+        <div class="cell title" title="${escapeHtml(b.title || '')}">${escapeHtml(b.title || '—')}</div>
+        <div class="cell file" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</div>
+        <div class="cell pages">—</div>
+        <div class="cell size">${escapeHtml(size)}</div>
+        <div class="cell read">${read}</div>
+        <div class="cell cur">${escapeHtml(cur)}</div>
+        <div class="cell date">${escapeHtml(date)}</div>
+      `;
+      state.rowNodesById.set(b.id, row);
+      frag.appendChild(row);
+    }
+    frag.appendChild(botSpacer);
+
+    el.volumesGrid.innerHTML = '';
+    el.volumesGrid.appendChild(frag);
+
+    const sample = el.volumesGrid.querySelector('.volTrow');
+    if (sample) {
+      const h = sample.getBoundingClientRect().height;
+      if (Number.isFinite(h) && h > 16) state.viewport.rowHeight = h;
+    }
+  }
+
+  function setVolumeSelectionByIndex(nextIdx, { ensureVisible = true, open = false } = {}) {
+    const state = volumeRenderState;
+    if (!state.sorted.length) return;
+    const idx = clamp(nextIdx, 0, state.sorted.length - 1);
+    const nextBook = state.sorted[idx];
+    if (!nextBook) return;
+
+    const prevId = appState.ui.volSelBookId;
+    appState.ui.volSelBookId = nextBook.id;
+    state.selectedIndex = idx;
+    updateMountedSelection(prevId, nextBook.id);
+    if (ensureVisible) ensureVolumeSelectionVisible();
+    mountVolumeRows();
+
+    if (el.volPreviewInfo) el.volPreviewInfo.textContent = `${idx + 1}/${state.sorted.length}`;
+    if (el.volOpenBtn) el.volOpenBtn.disabled = false;
+
+    if (open) openBook(nextBook);
+    else {
+      const cached = thumbMem.get(nextBook.id);
+      if (el.volPreviewImg) {
+        el.volPreviewImg.dataset.bookid = nextBook.id;
+        if (cached) {
+          el.volPreviewImg.src = cached;
+        } else {
+          getOrCreateThumb(nextBook)
+            .then((url) => {
+              if (el.volPreviewImg?.dataset.bookid === nextBook.id) el.volPreviewImg.src = url;
+            })
+            .catch(() => {});
+        }
+      }
+    }
+  }
+
+  function bindVolumeGridDelegates() {
+    if (volumeRenderState.handlersBound || !el.volumesGrid) return;
+    volumeRenderState.handlersBound = true;
+
+    el.volumesGrid.addEventListener('scroll', () => mountVolumeRows(), { passive: true });
+
+    el.volumesGrid.addEventListener('click', (e) => {
+      const row = e.target?.closest?.('.volTrow[data-rowidx]');
+      if (!row || !el.volumesGrid.contains(row)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const idx = parseInt(row.dataset.rowidx || '-1', 10);
+      if (idx >= 0) setVolumeSelectionByIndex(idx);
+    });
+
+    el.volumesGrid.addEventListener('dblclick', (e) => {
+      const row = e.target?.closest?.('.volTrow[data-rowidx]');
+      if (!row || !el.volumesGrid.contains(row)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const idx = parseInt(row.dataset.rowidx || '-1', 10);
+      if (idx >= 0) setVolumeSelectionByIndex(idx, { open: true });
+    });
+
+    el.volumesGrid.addEventListener('contextmenu', (e) => {
+      const row = e.target?.closest?.('.volTrow[data-rowidx]');
+      if (!row || !el.volumesGrid.contains(row) || isTypingTarget(e.target)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const idx = parseInt(row.dataset.rowidx || '-1', 10);
+      const b = volumeRenderState.sorted[idx];
+      if (!b) return;
+
+      showContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        items: [
+          { label: 'Open', onClick: () => openBook(b) },
+          { label: 'Open in new window', onClick: () => Tanko.api.window.openBookInNewWindow(b.id) },
+          { separator: true },
+          { label: 'Copy volume path', disabled: !b.path, onClick: () => b.path && Tanko.api.clipboard.copyText(b.path) },
+          { label: 'Reveal volume in Explorer', disabled: !b.path, onClick: () => b.path && Tanko.api.shell.revealPath(b.path) },
+        ],
+      });
+    });
+
+    el.volumesGrid.addEventListener('keydown', (e) => {
+      if (!volumeRenderState.sorted.length) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); setVolumeSelectionByIndex(volumeRenderState.selectedIndex + 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setVolumeSelectionByIndex(volumeRenderState.selectedIndex - 1); }
+      else if (e.key === 'Home') { e.preventDefault(); setVolumeSelectionByIndex(0); }
+      else if (e.key === 'End') { e.preventDefault(); setVolumeSelectionByIndex(volumeRenderState.sorted.length - 1); }
+      else if (e.key === 'Enter') { e.preventDefault(); setVolumeSelectionByIndex(volumeRenderState.selectedIndex, { open: true, ensureVisible: false }); }
+    });
+  }
+
   function renderVolumes() {
+    bindVolumeGridDelegates();
     const sid = appState.selectedSeriesId;
     const s = (appState.library.series || []).find(x => x.id === sid);
     const books = (appState.library.books || []).filter(b => b.seriesId === sid);
@@ -565,69 +834,9 @@ Hot search tokens:
 
     const q = (appState.ui.volSearch || '').trim().toLowerCase();
     const qNums = (q.match(/\d+/g) || []).map(n => parseInt(n, 10)).filter(n => Number.isFinite(n));
-
-    const getNum = (title) => {
-      const m = String(title).match(/\d+/);
-      return m ? parseInt(m[0], 10) : null;
-    };
-
-    const matchesSearch = (b) => {
-      if (!q) return true;
-      const t = String(b.title || '').toLowerCase();
-      if (t.includes(q)) return true;
-      if (qNums.length) {
-        const n = getNum(b.title);
-        if (Number.isFinite(n) && qNums.includes(n)) return true;
-        for (const nn of qNums) {
-          if (t.includes(String(nn))) return true;
-        }
-      }
-      return false;
-    };
-
     const sortMode = appState.ui.volSort || 'numerical';
-    const getLastRead = (id) => (appState.progressAll?.[id]?.updatedAt || 0);
 
-    const cmp = (a, b) => {
-      if (sortMode === 'alphabetical') {
-        return String(a.title).localeCompare(String(b.title), undefined, { sensitivity: 'base' });
-      }
-      if (sortMode === 'newest') {
-        return (b.mtimeMs || 0) - (a.mtimeMs || 0) || naturalCompare(a.title, b.title);
-      }
-      if (sortMode === 'lastread') {
-        return (getLastRead(b.id) - getLastRead(a.id)) || naturalCompare(a.title, b.title);
-      }
-      if (sortMode === 'numerical') {
-        const na = getNum(a.title);
-        const nb = getNum(b.title);
-        if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
-        if (Number.isFinite(na) && !Number.isFinite(nb)) return -1;
-        if (!Number.isFinite(na) && Number.isFinite(nb)) return 1;
-        return naturalCompare(a.title, b.title);
-      }
-      return naturalCompare(a.title, b.title);
-    };
-
-    const filtered = books.filter(matchesSearch);
-    const sorted = [...filtered].sort(cmp);
-
-    const fmtBytes = (n) => {
-      const v = Number(n);
-      if (!Number.isFinite(v) || v <= 0) return '—';
-      const units = ['B','KB','MB','GB','TB'];
-      let x = v;
-      let u = 0;
-      while (x >= 1024 && u < units.length - 1) { x /= 1024; u++; }
-      const dp = (u <= 1) ? 0 : (u === 2 ? 1 : 2);
-      return `${x.toFixed(dp)} ${units[u]}`;
-    };
-
-    const fmtDate = (ms) => {
-      const d = new Date(ms);
-      if (!Number.isFinite(d.getTime())) return '—';
-      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
-    };
+    const sorted = getCachedVisibleVolumes({ sid, books, q, qNums, sortMode });
 
     const setPreview = async (book, idx, total) => {
       if (!el.volPreviewInfo || !el.volPreviewImg) return;
@@ -656,6 +865,12 @@ Hot search tokens:
     // Empty state
     el.volTableHead?.classList.toggle('hidden', sorted.length === 0);
     el.volumesEmpty.classList.toggle('hidden', sorted.length !== 0);
+    volumeRenderState.sorted = sorted;
+    volumeRenderState.rowNodesById.clear();
+    volumeRenderState.viewport.start = 0;
+    volumeRenderState.viewport.end = -1;
+    volumeRenderState.viewport.lastScrollTop = -1;
+    volumeRenderState.viewport.lastViewportH = -1;
     el.volumesGrid.innerHTML = '';
 
     if (sorted.length === 0) {
@@ -670,76 +885,15 @@ Hot search tokens:
     appState.ui.volSelBookId = selId;
 
     const selIdx = sorted.findIndex(b => b.id === selId);
+    volumeRenderState.selectedIndex = (selIdx >= 0) ? selIdx : 0;
     const selBook = (selIdx >= 0) ? sorted[selIdx] : sorted[0];
 
     setPreview(selBook, (selIdx >= 0 ? selIdx : 0), sorted.length);
     if (el.volOpenBtn) el.volOpenBtn.disabled = !selBook;
 
-    const applySelectionStyles = () => {
-      const rows = el.volumesGrid.querySelectorAll('.volTrow');
-      rows.forEach(r => r.classList.toggle('sel', r.dataset.bookid === appState.ui.volSelBookId));
-    };
-
-    for (let i = 0; i < sorted.length; i++) {
-      const b = sorted[i];
-      const p = appState.progressAll?.[b.id];
-      const fileName = (b.path || '').split(/[\\/]/).pop() || '—';
-      const size = fmtBytes(b.sizeBytes);
-      const read = p?.finished ? '✓' : '—';
-      const cur = (p && Number.isFinite(p.pageIndex)) ? String((p.pageIndex || 0) + 1) : '—';
-      const date = fmtDate(b.mtimeMs);
-
-      const row = document.createElement('div');
-      row.className = `volTrow${(i % 2) ? ' alt' : ''}${(b.id === selId) ? ' sel' : ''}`;
-      row.dataset.bookid = b.id;
-      row.innerHTML = `
-        <div class="cell num">${i + 1}</div>
-        <div class="cell title" title="${escapeHtml(b.title || '')}">${escapeHtml(b.title || '—')}</div>
-        <div class="cell file" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</div>
-        <div class="cell pages">—</div>
-        <div class="cell size">${escapeHtml(size)}</div>
-        <div class="cell read">${read}</div>
-        <div class="cell cur">${escapeHtml(cur)}</div>
-        <div class="cell date">${escapeHtml(date)}</div>
-      `;
-
-      row.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        appState.ui.volSelBookId = b.id;
-        applySelectionStyles();
-        setPreview(b, i, sorted.length);
-        if (el.volOpenBtn) el.volOpenBtn.disabled = false;
-      });
-
-      row.addEventListener('dblclick', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        openBook(b);
-      });
-
-      // FIND_THIS:VOLUME_ROW_TEST_MENU
-      // BUILD21_MULTIWINDOW + BUILD21_EXPORT (Build 21)
-      row.addEventListener('contextmenu', (e) => {
-        if (isTypingTarget(e.target)) return;
-        e.preventDefault();
-        e.stopPropagation();
-
-        showContextMenu({
-          x: e.clientX,
-          y: e.clientY,
-          items: [
-            { label: 'Open', onClick: () => openBook(b) },
-            { label: 'Open in new window', onClick: () => Tanko.api.window.openBookInNewWindow(b.id) },
-            { separator: true },
-            { label: 'Copy volume path', disabled: !b.path, onClick: () => b.path && Tanko.api.clipboard.copyText(b.path) },
-            { label: 'Reveal volume in Explorer', disabled: !b.path, onClick: () => b.path && Tanko.api.shell.revealPath(b.path) },
-          ],
-        });
-      });
-
-      el.volumesGrid.appendChild(row);
-    }
+    if (!el.volumesGrid.hasAttribute('tabindex')) el.volumesGrid.tabIndex = 0;
+    mountVolumeRows();
+    ensureVolumeSelectionVisible();
   }
 
   function renderLibrary() {
@@ -921,4 +1075,3 @@ Hot search tokens:
     window.libraryHooks.renderLibrary = renderLibrary;
     window.libraryHooks.renderContinue = renderContinue;
   } catch {}
-
