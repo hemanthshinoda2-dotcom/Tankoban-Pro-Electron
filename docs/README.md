@@ -6,6 +6,11 @@ This folder is designed to make edits safe and fast, especially when using an Ar
 
 - `docs/00_START_HERE.md`
 
+## Public and contributor entry points
+
+- End users (prebuilt release flow): [USER_RELEASE_GUIDE.md](USER_RELEASE_GUIDE.md)
+- Contributors (source build flow): [CONTRIBUTING.md](../CONTRIBUTING.md)
+
 ## Architecture and boundaries
 
 - `docs/01_ARCHITECTURE_OVERVIEW.md`
