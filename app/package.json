@@ -2,13 +2,14 @@
   "name": "manga-scroller",
   "version": "0.1.31",
   "private": true,
-  "description": "Tankoban Plus \u2014 Build 87 (Video Performance + Context Menu + Chapters)",
+  "description": "Tankoban Plus — Build 87 (Video Performance + Context Menu + Chapters)",
   "main": "main.js",
   "scripts": {
     "prestart": "..\\scripts\\windows\\ensure_mpv_windows.bat",
     "start": "electron .",
     "predist": "..\\scripts\\windows\\ensure_mpv_windows.bat",
     "dist": "npm run build:player && electron-builder",
+    "dist:with-static-media": "npm run build:player && electron-builder --config.extraMetadata.buildProfile=with-static-media --config.asarUnpack[0]=node_modules/node-unrar-js/** --config.asarUnpack[1]=node_modules/ffmpeg-static/** --config.asarUnpack[2]=node_modules/ffprobe-static/**",
     "prepack": "..\\scripts\\windows\\ensure_mpv_windows.bat",
     "pack": "npm run build:player && electron-builder --dir",
     "pack:folder": "electron-packager . \"Tankoban\" --platform=win32 --arch=x64 --out=dist --overwrite --asar --asar.unpackDir=\"resources/mpv\" --icon=build/icon.ico",
@@ -45,9 +46,7 @@
     ],
     "asar": true,
     "asarUnpack": [
-      "node_modules/node-unrar-js/**",
-      "node_modules/ffmpeg-static/**",
-      "node_modules/ffprobe-static/**"
+      "node_modules/node-unrar-js/**"
     ],
     "win": {
       "target": [
@@ -101,9 +100,7 @@
     ]
   },
   "dependencies": {
-    "node-unrar-js": "^2.0.2",
-    "ffmpeg-static": "^5.2.0",
-    "ffprobe-static": "^3.1.0"
+    "node-unrar-js": "^2.0.2"
   },
   "productName": "Tankoban Plus"
 }
