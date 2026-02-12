@@ -1,0 +1,563 @@
+--- a/app/src/domains/video/video.js
++++ b/app/src/domains/video/video.js
+@@ -859,12 +859,24 @@
+     const hasPlayer = !!state.player;
+     
+     // BUILD 88 FIX 2.3: Cache menu HTML and only rebuild when state changes
+-    const currentAudioId = hasPlayer ? String(state.player.getState?.()?.audioTrackId ?? '') : '';
+-    const currentSubId = hasPlayer ? String(state.player.getState?.()?.subtitleTrackId ?? '') : '';
++    const st = hasPlayer ? (state.player.getState?.() || {}) : {};
++    const subsVisible = (st && typeof st.subtitlesVisible === 'boolean') ? st.subtitlesVisible : true;
++
++    const pickSelectedId = (tracks) => {
++      try {
++        const sel = Array.isArray(tracks) ? tracks.find(t => t && t.selected) : null;
++        if (sel && sel.id != null) return String(sel.id);
++      } catch {}
++      return '';
++    };
++
++    const currentAudioId = hasPlayer ? pickSelectedId(lastAudioTracks) : '';
++    const currentSubId = hasPlayer ? (subsVisible ? (pickSelectedId(lastSubtitleTracks) || '') : 'no') : '';
+     const currentSpeed = hasPlayer 
+-      ? (state.player.getState?.()?.speed ?? state.settings.speed ?? 1)
++      ? (st.speed ?? state.settings.speed ?? 1)
+       : (state.settings.speed ?? 1);
+     const audioTracksHash = JSON.stringify(lastAudioTracks.map(t => t.id));
+     const subTracksHash = JSON.stringify(lastSubtitleTracks.map(t => t.id));
+@@ -876,7 +888,7 @@
+       currentSpeed,
+       audioTracksHash,
+       subTracksHash,
+-      aspectMode: cachedAspectMod
++      aspectMode: cachedAspectMode
+@@ -1078,6 +1090,14 @@
+       // Update always-on-top checkmark
+       updateAlwaysOnTopUI();
++
++      // Refresh dynamic submenu state (tracks) on open so labels/checkmarks stay accurate.
++      safe(() => {
++        try {
++          return refreshTracksFromPlayer().then(() => { try { populateContextMenuSubmenus(); } catch {} });
++        } catch {}
++      });
+     } catch (err) {
+       console.error('[CONTEXT] Error updating menu items:', err);
+     }
+@@ -1223,6 +1243,61 @@
+   function syncDelayUi(){
+     if (el.videoAudioDelayValue) el.videoAudioDelayValue.textContent = fmtDelay(cachedAudioDelaySec);
+     if (el.videoSubtitleDelayValue) el.videoSubtitleDelayValue.textContent = fmtDelay(cachedSubtitleDelaySec);
+   }
+ 
++  async function refreshTracksFromPlayer(){
++    try {
++      if (!state.player) {
++        lastAudioTracks = [];
++        lastSubtitleTracks = [];
++        return { ok: false, audioTracks: [], subtitleTracks: [] };
++      }
++
++      const caps = state.player?.capabilities || {};
++      const canTracks = !!(caps.tracks && typeof state.player.getAudioTracks === 'function' && typeof state.player.getSubtitleTracks === 'function');
++      if (!canTracks) {
++        lastAudioTracks = [];
++        lastSubtitleTracks = [];
++        return { ok: false, audioTracks: [], subtitleTracks: [] };
++      }
++
++      const retry = async (fn, tries = 8, delayMs = 80) => {
++        let last = null;
++        for (let i = 0; i < tries; i++) {
++          try {
++            const r = await fn();
++            last = r;
++            if (r && r.ok && Array.isArray(r.tracks)) return r;
++          } catch (e) {
++            last = { ok: false, error: String(e && e.message ? e.message : e) };
++          }
++          await new Promise(res => setTimeout(res, delayMs));
++        }
++        return last || { ok: false, tracks: [] };
++      };
++
++      const ar = await retry(() => state.player.getAudioTracks(), 10, 90);
++      const sr = await retry(() => state.player.getSubtitleTracks(), 10, 90);
++
++      lastAudioTracks = Array.isArray(ar?.tracks) ? ar.tracks : [];
++      lastSubtitleTracks = Array.isArray(sr?.tracks) ? sr.tracks : [];
++
++      // Keep the last-selected subtitle id handy for toggle behavior
++      try {
++        const selSub = lastSubtitleTracks.find(t => t && t.selected);
++        if (selSub && selSub.id != null) lastSubtitleTrackIdForToggle = String(selSub.id);
++      } catch {}
++
++      return { ok: true, audioTracks: lastAudioTracks, subtitleTracks: lastSubtitleTracks };
++    } catch (err) {
++      console.error('[video] refreshTracksFromPlayer failed', err);
++      lastAudioTracks = [];
++      lastSubtitleTracks = [];
++      return { ok: false, audioTracks: [], subtitleTracks: [] };
++    }
++  }
++
+   async function refreshDelaysFromPlayer(){
+     if (!state.player) return;
+     const caps = state.player.capabilities || {};
+@@ -6178,29 +6253,35 @@
+         if (wasHidden) {
+           // BUILD74: Position submenu AFTER it's visible and content is rendered
+           // Use requestAnimationFrame to ensure DOM has updated with populated content
+           requestAnimationFrame(() => {
+             const menuRect = el.videoCtxMenu.getBoundingClientRect();
+             const btnRect = btn.getBoundingClientRect();
+             
+             // Get accurate panel dimensions now that it's visible and populated
+             const panelRect = panel.getBoundingClientRect();
+             const pw = panelRect.width || 200;
+             const ph = panelRect.height || 150;
+             
+             // Position to the right of the parent menu, aligned with the button
+-            let x = menuRect.right + 4;
+-            let y = btnRect.top;
++            let vx = menuRect.right + 4;
++            let vy = btnRect.top;
+             
+             // Viewport dimensions
+             const vw = window.innerWidth || 0;
+             const vh = window.innerHeight || 0;
+             
+             // If submenu would go off right edge, flip to left side
+-            if (x + pw > vw - 8) {
+-              x = menuRect.left - pw - 4;
++            if (vx + pw > vw - 8) {
++              vx = menuRect.left - pw - 4;
+             }
+             
+             // Clamp Y to viewport (keep submenu fully visible)
+-            y = Math.max(8, Math.min(y, vh - ph - 8));
++            vy = Math.max(8, Math.min(vy, vh - ph - 8));
+             
+-            // Apply position
+-            panel.style.left = `${x}px`;
+-            panel.style.top = `${y}px`;
++            // Apply position (panel is positioned relative to the menu)
++            const relLeft = vx - menuRect.left;
++            const relTop = vy - menuRect.top;
++            panel.style.left = `${relLeft}px`;
++            panel.style.top = `${relTop}px`;
+           });
+         }
+         
+         return;
+       }
+@@ -7600,288 +7681,6 @@
+     window.addEventListener('resize', () => {
+       if (!document.body.classList.contains('inVideoPlayer')) return;
+       safe(() => syncFullscreenUi());
+     }, { passive: true });
+   }
+-  // BUILD 89 FIX 1: Initialize context menu with click and hover handlers
+-  function initializeContextMenu() {
+-    if (!el.videoCtxMenu) {
+-      console.warn('[BUILD89] Context menu element not found');
+-      return;
+-    }
+-    
+-    console.log('[BUILD89] Initializing context menu event handlers');
+-    
+-    // Handle all click events on the menu (event delegation)
+-    el.videoCtxMenu.addEventListener('click', (e) => {
+-      const btn = e.target.closest('button.ctxItem');
+-      if (!btn) return;
+-      
+-      const act = btn.getAttribute('data-act');
+-      if (!act) return;
+-      
+-      e.stopPropagation();
+-      e.preventDefault();
+-      
+-      console.log('[BUILD89] Context menu action:', act);
+-      
+-      // Handle all menu actions
+-      handleContextMenuAction(act, btn);
+-      
+-      // Close menu after action (except for parent items that open submenus)
+-      if (!btn.classList.contains('ctxExpandable')) {
+-        closeVideoCtxMenu();
+-      }
+-    });
+-    
+-    // Handle submenu hover behavior (PotPlayer-style)
+-    const submenuParents = el.videoCtxMenu.querySelectorAll('.ctxExpandable[data-submenu]');
+-    submenuParents.forEach((parent) => {
+-      const submenuId = parent.getAttribute('data-submenu');
+-      const panel = el.videoCtxMenu.querySelector(`.ctxSubmenuPanel[data-submenu-id="${submenuId}"]`);
+-      
+-      if (!panel) return;
+-      
+-      // Show submenu on hover
+-      parent.addEventListener('mouseenter', () => {
+-        // Hide all other submenus first
+-        el.videoCtxMenu.querySelectorAll('.ctxSubmenuPanel').forEach((p) => {
+-          if (p !== panel) p.classList.add('hidden');
+-        });
+-        
+-        // Show this submenu
+-        panel.classList.remove('hidden');
+-        ctxActiveSubmenu = submenuId;
+-        
+-        // Position submenu to the right of parent
+-        const parentRect = parent.getBoundingClientRect();
+-        const menuRect = el.videoCtxMenu.getBoundingClientRect();
+-        const vw = window.innerWidth;
+-        const vh = window.innerHeight;
+-        
+-        // Try to place to the right of menu
+-        let x = menuRect.right + 4;
+-        let y = parentRect.top;
+-        
+-        // If it would go off screen, place to the left instead
+-        const panelWidth = panel.offsetWidth || 200;
+-        if (x + panelWidth > vw - 8) {
+-          x = menuRect.left - panelWidth - 4;
+-        }
+-        
+-        // Clamp vertical position
+-        const panelHeight = panel.offsetHeight || 300;
+-        y = Math.max(8, Math.min(y, vh - panelHeight - 8));
+-        
+-        panel.style.left = `${x}px`;
+-        panel.style.top = `${y}px`;
+-      });
+-      
+-      // Keep submenu visible when hovering over it
+-      panel.addEventListener('mouseenter', () => {
+-        panel.classList.remove('hidden');
+-      });
+-      
+-      // Hide submenu when mouse leaves both parent and panel
+-      let hideTimeout;
+-      const scheduleHide = () => {
+-        clearTimeout(hideTimeout);
+-        hideTimeout = setTimeout(() => {
+-          if (ctxActiveSubmenu === submenuId) {
+-            panel.classList.add('hidden');
+-            ctxActiveSubmenu = null;
+-          }
+-        }, 200);
+-      };
+-      
+-      parent.addEventListener('mouseleave', scheduleHide);
+-      panel.addEventListener('mouseleave', scheduleHide);
+-      
+-      parent.addEventListener('mouseenter', () => clearTimeout(hideTimeout));
+-      panel.addEventListener('mouseenter', () => clearTimeout(hideTimeout));
+-    });
+-    
+-    // Close menu when clicking outside
+-    document.addEventListener('click', (e) => {
+-      if (ctxMenuOpen && !el.videoCtxMenu.contains(e.target)) {
+-        closeVideoCtxMenu();
+-      }
+-    });
+-    
+-    console.log('[BUILD89] Context menu initialization complete');
+-  }
+-  
+-  // BUILD 89 FIX 1: Handle context menu actions
+-  function handleContextMenuAction(action, button) {
+-    if (!state.player && action !== 'openFile' && action !== 'alwaysOnTop' && action !== 'toggleFullscreen') {
+-      console.warn('[BUILD89] No player available for action:', action);
+-      return;
+-    }
+-    
+-    console.log('[BUILD89] Executing action:', action);
+-    
+-    switch (action) {
+-      // Playback control
+-      case 'togglePlay':
+-        if (state.player) state.player.togglePlay();
+-        break;
+-      case 'stop':
+-        if (state.player) state.player.stop();
+-        break;
+-      case 'restart':
+-        if (state.player) state.player.seekTo(0);
+-        break;
+-        
+-      // Seeking
+-      case 'seekBack10':
+-        if (state.player) state.player.seekRelative(-10);
+-        break;
+-      case 'seekForward10':
+-        if (state.player) state.player.seekRelative(10);
+-        break;
+-      case 'seekBack30':
+-        if (state.player) state.player.seekRelative(-30);
+-        break;
+-      case 'seekForward30':
+-        if (state.player) state.player.seekRelative(30);
+-        break;
+-        
+-      // Playlist navigation
+-      case 'prevEpisode':
+-        safe(() => playPrevEpisode());
+-        break;
+-      case 'nextEpisode':
+-        safe(() => playNextEpisode());
+-        break;
+-        
+-      // Speed
+-      case 'speed':
+-        const speed = parseFloat(button.getAttribute('data-speed'));
+-        if (Number.isFinite(speed) && state.player) {
+-          state.player.setSpeed(speed);
+-          state.settings.speed = speed;
+-          persistVideoSettings();
+-        }
+-        break;
+-        
+-      // Audio tracks
+-      case 'selectAudioTrack':
+-        const audioTrackId = button.getAttribute('data-track-id');
+-        if (audioTrackId && state.player && typeof state.player.setAudioTrack === 'function') {
+-          state.player.setAudioTrack(audioTrackId);
+-        }
+-        break;
+-        
+-      // Audio delay
+-      case 'audioDelayInc':
+-        if (state.player && typeof state.player.setAudioDelay === 'function') {
+-          const currentDelay = cachedAudioDelaySec || 0;
+-          const newDelay = currentDelay + 0.05;
+-          state.player.setAudioDelay(newDelay);
+-          cachedAudioDelaySec = newDelay;
+-          hudNotice(`Audio delay: ${fmtDelay(newDelay)}`);
+-        }
+-        break;
+-      case 'audioDelayDec':
+-        if (state.player && typeof state.player.setAudioDelay === 'function') {
+-          const currentDelay = cachedAudioDelaySec || 0;
+-          const newDelay = currentDelay - 0.05;
+-          state.player.setAudioDelay(newDelay);
+-          cachedAudioDelaySec = newDelay;
+-          hudNotice(`Audio delay: ${fmtDelay(newDelay)}`);
+-        }
+-        break;
+-      case 'audioDelayReset':
+-        if (state.player && typeof state.player.setAudioDelay === 'function') {
+-          state.player.setAudioDelay(0);
+-          cachedAudioDelaySec = 0;
+-          hudNotice('Audio delay reset');
+-        }
+-        break;
+-        
+-      // Subtitle tracks
+-      case 'selectSubtitleTrack':
+-        const subTrackId = button.getAttribute('data-track-id');
+-        if (subTrackId && state.player && typeof state.player.setSubtitleTrack === 'function') {
+-          state.player.setSubtitleTrack(subTrackId);
+-        }
+-        break;
+-        
+-      // Subtitle delay
+-      case 'subDelayInc':
+-        if (state.player && typeof state.player.setSubtitleDelay === 'function') {
+-          const currentDelay = cachedSubtitleDelaySec || 0;
+-          const newDelay = currentDelay + 0.05;
+-          state.player.setSubtitleDelay(newDelay);
+-          cachedSubtitleDelaySec = newDelay;
+-          hudNotice(`Subtitle delay: ${fmtDelay(newDelay)}`);
+-        }
+-        break;
+-      case 'subDelayDec':
+-        if (state.player && typeof state.player.setSubtitleDelay === 'function') {
+-          const currentDelay = cachedSubtitleDelaySec || 0;
+-          const newDelay = currentDelay - 0.05;
+-          state.player.setSubtitleDelay(newDelay);
+-          cachedSubtitleDelaySec = newDelay;
+-          hudNotice(`Subtitle delay: ${fmtDelay(newDelay)}`);
+-        }
+-        break;
+-      case 'subDelayReset':
+-        if (state.player && typeof state.player.setSubtitleDelay === 'function') {
+-          state.player.setSubtitleDelay(0);
+-          cachedSubtitleDelaySec = 0;
+-          hudNotice('Subtitle delay reset');
+-        }
+-        break;
+-        
+-      // File operations
+-      case 'openFile':
+-        Tanko.api.video.openFileDialog();
+-        break;
+-      case 'alwaysOnTop':
+-        Tanko.api.window.toggleAlwaysOnTop();
+-        break;
+-      case 'toggleFullscreen':
+-        Tanko.api.window.toggleFullscreen();
+-        break;
+-      case 'screenshot':
+-        Tanko.api.window.takeScreenshot();
+-        break;
+-        
+-      // Subtitle loading
+-      case 'loadSubtitle':
+-        Tanko.api.window.openSubtitleDialog();
+-        break;
+-        
+-      // Aspect ratio
+-      case 'aspectRatio':
+-        const aspect = button.getAttribute('data-aspect');
+-        if (aspect && state.player && typeof state.player.setAspect === 'function') {
+-          state.player.setAspect(aspect);
+-        }
+-        break;
+-        
+-      default:
+-        console.warn('[BUILD89] Unknown context menu action:', action);
+-    }
+-  }
+ 
+   function bind() {
+@@ -7921,10 +7719,6 @@
+   function bind() {
+-    // BUILD 89 FIX 1: Initialize context menu event handlers
+-    initializeContextMenu();
+-    
+     // Mode buttons
+     el.modeComicsBtn?.addEventListener('click', () => setMode('comics'));
+     el.modeVideosBtn?.addEventListener('click', () => setMode('videos'));
+--- a/app/src/domains/player/video_player_adapter.js
++++ b/app/src/domains/player/video_player_adapter.js
+@@ -182,6 +182,7 @@
+     // Build 5.4+ API: unified adapter surface + capability flags
+     async function getAudioTracks(){ return { ok: false, tracks: [] }; }
+     async function getSubtitleTracks(){ return { ok: false, tracks: [] }; }
++    async function getChapters(){ return { ok: false, chapters: [] }; }
+@@ -2687,6 +2688,106 @@
+     async getSubtitleTracks() {
+       try {
+         await ensureCreated();
+         if (!created || !handleId) return { ok: true, tracks: [] };
+         const list = await __getTrackList(12, 100);
+         const selectedId = await __getSelectedId('sid');
+         const tracks = (list || []).filter(t => t.type === 'sub')
+           .map(t => ({
+             id: String(t.id),
+             lang: String(t.lang || ''),
+             title: String(t.title || t['lang'] || ''),
+             selected: String(t.id) === String(selectedId),
+           }));
+         return { ok: true, tracks };
+       } catch (e) {
+         return { ok: false, error: String(e && e.message ? e.message : e), tracks: [] };
+       }
+     },
++
++    async getChapters() {
++      try {
++        await ensureCreated();
++        if (!created || !handleId) return { ok: true, chapters: [] };
++
++        // mpv exposes chapters via the 'chapter-list' property (JSON)
++        for (let i = 0; i < 12; i++) {
++          const raw = await __getPropString('chapter-list');
++          const parsed = __tryParseJson(raw);
++          if (Array.isArray(parsed)) {
++            const chapters = parsed
++              .map((c) => ({
++                time: Number(c && c.time),
++                title: String((c && (c.title || c.name)) || ''),
++              }))
++              .filter((c) => Number.isFinite(c.time) && c.time >= 0);
++            return { ok: true, chapters };
++          }
++          await __sleep(100);
++        }
++
++        return { ok: true, chapters: [] };
++      } catch (e) {
++        return { ok: false, error: String(e && e.message ? e.message : e), chapters: [] };
++      }
++    },
++
++    async getAspectRatio() {
++      try {
++        await ensureCreated();
++        if (!created || !handleId) return { ok: true, value: 'no' };
++        const r = await __getPropString('video-aspect-override');
++        return { ok: true, value: (r == null ? 'no' : String(r)) };
++      } catch (e) {
++        return { ok: false, error: String(e && e.message ? e.message : e), value: 'no' };
++      }
++    },
++
++    async setAspectRatio(mode) {
++      try {
++        await ensureCreated();
++        if (!created || !handleId) return { ok: false, error: 'libmpv not ready' };
++        const m = String(mode || '').trim();
++        const v = (!m || m === 'auto') ? 'no' : m;
++        await lib.setPropertyString(handleId, 'video-aspect-override', v);
++        return { ok: true, value: v };
++      } catch (e) {
++        return { ok: false, error: String(e && e.message ? e.message : e) };
++      }
++    },
++
++    async getCrop() {
++      try {
++        await ensureCreated();
++        if (!created || !handleId) return { ok: true, value: 'no' };
++        const r = await __getPropString('video-crop');
++        return { ok: true, value: (r == null ? 'no' : String(r)) };
++      } catch (e) {
++        return { ok: false, error: String(e && e.message ? e.message : e), value: 'no' };
++      }
++    },
++
++    async setCrop(mode) {
++      try {
++        await ensureCreated();
++        if (!created || !handleId) return { ok: false, error: 'libmpv not ready' };
++        const m = String(mode || '').trim();
++        const v = (!m || m === 'none') ? 'no' : m;
++        await lib.setPropertyString(handleId, 'video-crop', v);
++        return { ok: true, value: v };
++      } catch (e) {
++        return { ok: false, error: String(e && e.message ? e.message : e) };
++      }
++    },
++
++    async resetVideoTransforms() {
++      try {
++        await ensureCreated();
++        if (!created || !handleId) return { ok: false, error: 'libmpv not ready' };
++        await lib.setPropertyString(handleId, 'video-aspect-override', 'no');
++        await lib.setPropertyString(handleId, 'video-crop', 'no');
++        return { ok: true };
++      } catch (e) {
++        return { ok: false, error: String(e && e.message ? e.message : e) };
++      }
++    },
+@@ -2874,8 +2975,6 @@
+     async listSubtitleTracks() { return []; },
+     async setVideoTransform() { return { ok: false, error: 'not implemented' }; },
+-    async resetVideoTransforms() { return { ok: false, error: 'not implemented' }; },
+-    async addExternalSubtitle() { return { ok: false, error: 'not implemented' }; },
+ 
+     async destroy() {
+       if (destroyed) return;
+       destroyed = true;
+--- a/app/src/styles.css
++++ b/app/src/styles.css
+@@ -2860,7 +2860,7 @@
+ .videoCtxMenu .ctxSubmenuPanel{
+-	position:fixed;
++	position:absolute;
+   z-index:81;
+   min-width:200px;
+   max-width:280px;

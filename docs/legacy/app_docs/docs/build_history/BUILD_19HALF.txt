@@ -1,0 +1,1 @@
+Tankoban Pro Build 19half (detached mpv playback memory + persistent Continue Watching + library-first flow)
