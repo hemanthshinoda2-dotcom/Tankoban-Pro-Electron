@@ -6,6 +6,14 @@ The Electron application launches this player as a separate process. The main wi
 
 Embedded canvas playback is not used in this repository line.
 
+## Environment and setup requirements
+
+To avoid version drift, use the root README as source of truth for machine requirements and first-run troubleshooting:
+
+- `../../README.md#system-requirements`
+- `../../README.md#first-run-quickstart-windows`
+- `../../README.md#first-run-troubleshooting`
+
 ## Key file
 
 - `run_player.py` — the player
