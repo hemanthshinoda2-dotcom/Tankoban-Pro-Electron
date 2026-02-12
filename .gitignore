@@ -1,0 +1,17 @@
+# Node and build output
+app/node_modules/
+app/dist/
+app/out/
+app/release/
+
+# Python local environments and caches
+app/player_qt/.venv/
+app/player_qt/.venv_build/
+app/player_qt/__pycache__/
+**/__pycache__/
+*.pyc
+
+# MPV runtime binaries are downloaded by scripts/windows/ensure_mpv_windows.bat
+app/resources/mpv/windows/*
+!app/resources/mpv/windows/.gitkeep
+!app/resources/mpv/windows/README.md

@@ -1,0 +1,640 @@
+/*
+  Tankoban Plus - Video Library UI Refinements
+  Build 97+ - Video Library Only
+  
+  Purpose: Make video library UI match the comic library's UI finesse
+  - Uses same sizing and spacing as comic library
+  - Only targets video-specific selectors
+  - Does NOT modify comic library styles
+*/
+
+/* ===================================
+   VIDEO SHOW GRID - Match Comic Library
+   =================================== */
+
+/* Video tiles follow the global tile density toggle (Tiles: Large/Medium).
+   Default: Large (comfortable) for Videos.
+   NOTE: Comics sizing is controlled elsewhere and should not be impacted by this file. */
+#videoShowsGrid.seriesGrid{
+  padding: 2px !important;
+  display: grid !important;
+}
+
+body[data-tile-density="comfortable"] #videoShowsGrid.seriesGrid{
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)) !important;
+  gap: 12px !important;
+}
+
+body[data-tile-density="compact"] #videoShowsGrid.seriesGrid{
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)) !important;
+  gap: 10px !important;
+}
+
+/* Ensure video show cards match comic series cards exactly */
+#videoShowsGrid .seriesCard {
+  border: 1px solid rgba(255,255,255,.125) !important;
+  background: transparent !important;
+  border-radius: var(--lib-radius-sm) !important;
+  padding: 6px !important;
+  cursor: pointer !important;
+  position: relative !important;
+  transition: transform 90ms ease-out, background 90ms ease-out, border-color 90ms ease-out !important;
+}
+
+#videoShowsGrid .seriesCard:hover {
+  background: var(--lib-hover) !important;
+  transform: scale(1.01) !important;
+  border-color: rgba(255,255,255,.16) !important;
+}
+
+/* Match comic library cover styling */
+#videoShowsGrid .seriesCard .seriesCoverWrap {
+  position: relative !important;
+}
+
+#videoShowsGrid .seriesCard .seriesCoverWrap .thumbWrap {
+  position: relative !important;
+  z-index: 1 !important;
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 65 / 100 !important;
+  border: 1px solid rgba(255,255,255,.188) !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  background: rgba(0,0,0,.35) !important;
+}
+
+/* Build 10.5: Folder-tile style placeholder when a show has no thumbnail or thumbnails are turned off (Videos only). */
+#videoShowsGrid .seriesCard .seriesCoverWrap .thumbWrap.noThumb{
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(0,0,0,.22) !important;
+}
+
+#videoShowsGrid .seriesCard .seriesCoverWrap .thumbWrap.noThumb .thumb{
+  opacity: 0 !important;
+}
+
+#videoShowsGrid .seriesCard .seriesCoverWrap .thumbWrap.noThumb::after{
+  content: "";
+  width: 36px;
+  height: 36px;
+  opacity: .65;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  /* Simple film-strip svg (monochrome) */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect x='14' y='10' width='36' height='44' rx='6' fill='%23ffffff' fill-opacity='0.55'/%3E%3Crect x='20' y='18' width='24' height='28' rx='2' fill='%23000000' fill-opacity='0.35'/%3E%3Cg fill='%23000000' fill-opacity='0.35'%3E%3Crect x='16' y='14' width='4' height='4'/%3E%3Crect x='16' y='22' width='4' height='4'/%3E%3Crect x='16' y='30' width='4' height='4'/%3E%3Crect x='16' y='38' width='4' height='4'/%3E%3Crect x='16' y='46' width='4' height='4'/%3E%3Crect x='44' y='14' width='4' height='4'/%3E%3Crect x='44' y='22' width='4' height='4'/%3E%3Crect x='44' y='30' width='4' height='4'/%3E%3Crect x='44' y='38' width='4' height='4'/%3E%3Crect x='44' y='46' width='4' height='4'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+#videoShowsGrid .seriesCard .seriesCoverWrap .thumb {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  image-rendering: auto !important;
+}
+
+/* Match comic library text styling */
+#videoShowsGrid .seriesName {
+  margin-top: 6px !important;
+  font-size: 12px !important;
+  color: var(--text) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  pointer-events: none !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+}
+
+#videoShowsGrid .seriesInfo {
+  margin-top: 6px !important;
+  min-width: 0 !important;
+}
+
+#videoShowsGrid .seriesTitle {
+  font-weight: 650 !important;
+  font-size: 11px !important;
+}
+
+#videoShowsGrid .seriesMeta {
+  margin-top: 4px !important;
+  font-size: 11px !important;
+  color: var(--muted) !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  gap: 6px !important;
+  min-width: 0 !important;
+}
+
+/* ===================================
+   VIDEO CONTINUE WATCHING - Match Comic Library
+   =================================== */
+
+/* Continue Watching shelf uses the same 'continueRow/continueYacRow' container as Comics.
+   The legacy list element remains for compatibility but is not used for layout. */
+#videoContinueList{
+  display:none !important;
+}
+
+/* BUILD105: Make Continue Watching posters the same size as the Shows grid cards.
+   The base .contTile style uses a fixed height that includes the title area, which
+   makes the actual poster image shorter than the Shows covers.
+   For Videos, treat --cont-cover-h/--cont-cover-w as the *poster* size, and let the
+   tile grow naturally to fit the title below it. */
+#videoContinuePanel.continueYacRow{
+  align-items: flex-start !important; /* prevent flex stretch from forcing tall empty tiles */
+}
+
+#videoContinuePanel .contTile{
+  width: var(--cont-cover-w, 210px) !important;
+  height: auto !important;
+}
+
+#videoContinuePanel .contCover{
+  height: var(--cont-cover-h, 323px) !important;
+  flex: 0 0 auto !important;
+}
+
+/* ==================================================
+   SCROLL + LAYOUT SAFETY
+   Fixes:
+   - Library view can't scroll (wheel/trackpad does nothing)
+   - Continue Watching tiles render at tiny "thumb" size
+   --------------------------------------------------
+   Root cause:
+   Grid/flex min-size defaults can collapse scroll containers depending on
+   platform + DPI + theme overrides. We force a clear "height chain" from
+   main -> view -> libraryShell -> scroll regions, and allow grid children to
+   shrink so their internal overflow areas can actually scroll.
+   ================================================== */
+
+/* Keep library content within the viewport and route scrolling to the intended panes. */
+body:not(.inPlayer) main{
+  height: 100vh !important;
+  overflow: hidden !important;
+}
+
+body:not(.inPlayer) #libraryView,
+body:not(.inPlayer) #videoLibraryView{
+  height: 100% !important;
+}
+
+body:not(.inPlayer) .libraryShell{
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+body:not(.inPlayer) .libraryShell > .libSidebar,
+body:not(.inPlayer) .libraryShell > .libContent{
+  min-height: 0 !important;
+}
+
+/* Ensure the primary library column can host a scrollable home view. */
+body:not(.inPlayer) .libContent{
+  overflow: hidden !important;
+}
+
+body:not(.inPlayer) .homeView{
+  overflow: auto !important;
+  min-height: 0 !important;
+}
+
+/* Ensure the remove (✕) button remains clickable even when overlays are present. */
+#videoContinuePanel .contRemove{
+  pointer-events: auto !important;
+  z-index: 5 !important;
+}
+
+/* ===================================
+   VIDEO EPISODE TABLE - Improved Information Display
+   =================================== */
+
+/* Improved column widths for better readability - matches comic library precision */
+#videoEpTableHead {
+  flex: 0 0 auto !important;
+  display: grid !important;
+  /* BUILD100v7: Video episode table matches Comic density but without redundant File Name column.
+     Columns: # | Episode | Size | Duration | Resolution | Progress | Modified */
+  /* Give the Episode column more room than Comics (video episode titles can be long). */
+  grid-template-columns: 42px minmax(360px, 3fr) 90px 110px 90px 92px 132px !important;
+  gap: 10px !important;
+  padding: 6px 10px !important;
+  background: rgba(229,231,235,.08) !important;
+  color: rgba(229,231,235,.84) !important;
+  border-bottom: 1px solid rgba(255,255,255,.20) !important;
+  font-weight: 800 !important;
+  font-size: 11px !important;
+  user-select: none !important;
+  align-items: center !important;
+}
+
+/* Build 9 (UI): Prevent header/body column drift when the episode list scrolls.
+   On Windows, the body scrollbar can steal width from the grid and misalign
+   columns vs the header. Reserving the gutter keeps both grids in lockstep. */
+#videoEpisodesWrap .volTableBody{
+  scrollbar-gutter: stable;
+}
+
+#videoEpisodesGrid .volTrow {
+  display: grid !important;
+  /* BUILD100v7: Keep row template in lockstep with the header. */
+  grid-template-columns: 42px minmax(360px, 3fr) 90px 110px 90px 92px 132px !important;
+  gap: 10px !important;
+  padding: 4px 10px !important;
+  align-items: center !important;
+  cursor: default !important;
+  border-bottom: 1px solid rgba(255,255,255,.12) !important;
+  min-height: 34px !important;
+  transition: background 90ms ease-out !important;
+}
+
+#videoEpisodesGrid .volTrow:hover {
+  background: rgba(255,255,255,.04) !important;
+}
+
+#videoEpisodesGrid .volTrow.sel {
+  background: rgba(var(--vx-accent-rgb),.12) !important;
+}
+
+
+/* Column alignment: keep Comic Library table text rules; just align numeric fields cleanly. */
+#videoEpisodesGrid .volTrow .cell.size,
+#videoEpisodesGrid .volTrow .cell.duration,
+#videoEpisodesGrid .volTrow .cell.resolution,
+#videoEpisodesGrid .volTrow .cell.date{
+  text-align: right !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+#videoEpisodesGrid .volTrow .cell.progress{
+  text-align: center !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+
+#videoEpisodesGrid .volTrow .cell.progress {
+  color: rgba(var(--vx-accent-rgb),.85) !important;
+  font-weight: 600 !important;
+}
+
+/* Date column */
+#videoEpisodesGrid .volTrow .cell.date {
+  color: rgba(229,231,235,.6) !important;
+  font-size: 10px !important;
+}
+
+/* ===================================
+   VIDEO SIDEBAR - Match Comic Library
+   =================================== */
+
+#videoLibraryView .libSidebar {
+  background: rgba(10,12,20,.46) !important;
+  backdrop-filter: blur(calc(var(--vx-blur) - 3px)) saturate(145%) !important;
+  -webkit-backdrop-filter: blur(calc(var(--vx-blur) - 3px)) saturate(145%) !important;
+  border-right: 1px solid rgba(255,255,255,.10) !important;
+  width: 240px !important;
+  flex-shrink: 0 !important;
+}
+
+#videoLibraryView .navHeader {
+  color: rgba(255,255,255,.86) !important;
+  font-size: 12px !important;
+  letter-spacing: .35px !important;
+  text-transform: uppercase !important;
+  font-weight: 700 !important;
+  margin-bottom: 8px !important;
+}
+
+#videoLibraryView .navBtn {
+  border-radius: 12px !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  background: rgba(255,255,255,.05) !important;
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+  cursor: pointer !important;
+  transition: all 90ms ease-out !important;
+  margin-bottom: 6px !important;
+}
+
+#videoLibraryView .navBtn:hover {
+  background: rgba(255,255,255,.09) !important;
+  box-shadow: 0 12px 26px -22px rgba(0,0,0,.85) !important;
+  border-color: rgba(255,255,255,.16) !important;
+}
+
+/* ===================================
+   VIDEO FOLDER TREE - Match Comic Library
+   =================================== */
+
+#videoLibraryView .folderTree {
+  margin-top: 8px !important;
+}
+
+#videoLibraryView .folderItem {
+  padding: 6px 8px !important;
+  font-size: 12px !important;
+  border-radius: 8px !important;
+  margin-bottom: 2px !important;
+  cursor: pointer !important;
+  transition: background 90ms ease-out !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+#videoLibraryView .folderItem:hover {
+  background: rgba(255,255,255,.08) !important;
+}
+
+#videoLibraryView .folderItem.active {
+  background: rgba(var(--vx-accent-rgb),.18) !important;
+  font-weight: 600 !important;
+}
+
+/* Video-only: keep the legacy inline root remove affordance, but make it visually
+   subordinate so the sidebar reads like the Comic Library. */
+#videoLibraryView .videoRootRemove{
+  margin-left: 6px !important;
+  padding: 2px 8px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: rgba(255,255,255,.04) !important;
+  color: rgba(229,231,235,.70) !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+  cursor: pointer !important;
+  flex: 0 0 auto !important;
+}
+#videoLibraryView .videoRootRemove:hover{
+  background: rgba(255,255,255,.07) !important;
+  border-color: rgba(255,255,255,.14) !important;
+  color: rgba(229,231,235,.86) !important;
+}
+
+/* ===================================
+   VIDEO PANELS - Match Comic Library
+   =================================== */
+
+#videoShowsPanel.panel,
+#videoShowDetailPanel.panel {
+  background: var(--panel) !important;
+  border: 1px solid var(--lib-border) !important;
+  border-radius: var(--lib-radius) !important;
+  padding: var(--lib-pad) !important;
+}
+
+.videoContinueRow + .panel {
+  background: var(--panel) !important;
+  border: 1px solid var(--lib-border) !important;
+  border-radius: var(--lib-radius) !important;
+  padding: var(--lib-pad) !important;
+}
+
+/* Panel title styling */
+#videoShowsPanel .panelTitleRow,
+#videoShowDetailPanel .panelTitleRow {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 12px !important;
+}
+
+#videoShowsPanel .panelTitle,
+#videoShowDetailPanel .panelTitle {
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  color: rgba(229,231,235,.92) !important;
+}
+
+/* ===================================
+   VIDEO CONTROLS - Match Comic Library
+   =================================== */
+
+#videoLibraryView .volActionStrip {
+  flex: 0 0 auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 10px !important;
+  border: 1px solid var(--lib-border) !important;
+  border-radius: var(--lib-radius-sm) !important;
+  background: rgba(var(--surface-rgb),.34) !important;
+  padding: 6px 8px !important;
+  margin-bottom: 10px !important;
+}
+
+#videoLibraryView .search-sm {
+  padding: 6px 10px !important;
+  height: 32px !important;
+  border-radius: var(--lib-radius-sm) !important;
+  font-size: 12px !important;
+  min-width: 220px !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  background: rgba(255,255,255,.05) !important;
+  color: rgba(229,231,235,.92) !important;
+  transition: all 90ms ease-out !important;
+}
+
+#videoLibraryView .search-sm:focus {
+  border-color: rgba(var(--vx-accent-rgb),.4) !important;
+  background: rgba(255,255,255,.08) !important;
+  outline: none !important;
+}
+
+#videoLibraryView .select-sm {
+  padding: 6px 10px !important;
+  height: 32px !important;
+  border-radius: var(--lib-radius-sm) !important;
+  font-size: 11px !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  background: rgba(255,255,255,.05) !important;
+  color: rgba(229,231,235,.92) !important;
+  transition: all 90ms ease-out !important;
+  cursor: pointer !important;
+}
+
+#videoLibraryView .select-sm:hover {
+  background: rgba(255,255,255,.08) !important;
+  border-color: rgba(255,255,255,.16) !important;
+}
+
+#videoLibraryView .iconBtn {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  background: rgba(255,255,255,.06) !important;
+  color: rgba(255,255,255,.92) !important;
+  box-shadow: 0 10px 22px -18px rgba(0,0,0,.85) !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 90ms ease-out !important;
+}
+
+#videoLibraryView .iconBtn:hover {
+  background: rgba(255,255,255,.10) !important;
+  box-shadow: 0 12px 26px -18px rgba(0,0,0,.85), 0 0 0 1px rgba(var(--vx-accent-rgb),.08) inset !important;
+  transform: scale(1.05) !important;
+}
+
+/* ===================================
+   VIDEO PREVIEW PANE - Match Comic Library
+   =================================== */
+
+#videoEpisodesWrap .volPreviewPane {
+  width: auto !important;
+  flex: 2 1 0 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  border-right: none !important;
+  background: rgba(0,0,0,.72) !important;
+}
+
+#videoEpPreviewInfo {
+  font-size: 11px !important;
+  color: var(--muted) !important;
+  line-height: 1.5 !important;
+  /* BUILD100v3: Keep preview copy calm like Comics (single-line w/ ellipsis).
+     Full details live in the tooltip + table. */
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* BUILD100v3: Breadcrumb string can get extremely long in videos.
+   Keep the visual line short but preserve full value via title attribute. */
+#videoCrumbText {
+  display: inline-block !important;
+  max-width: min(60vw, 760px) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+#videoEpisodesWrap .volPreviewCenter {
+  flex: 1 !important;
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 8px !important;
+  min-height: 0 !important;
+}
+
+#videoEpPreviewImg {
+  max-width: min(640px, 78%) !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+  border-radius: 10px !important;
+  box-shadow: 0 14px 34px rgba(0,0,0,.55) !important;
+}
+
+/* ===================================
+   VIDEO EMPTY STATES - Match Comic Library
+   =================================== */
+
+#videoShowsEmpty,
+#videoEpisodesEmpty,
+#videoContinueEmpty {
+  padding: 40px 20px !important;
+  text-align: center !important;
+  font-size: 13px !important;
+  color: rgba(229, 231, 235, 0.5) !important;
+  line-height: 1.6 !important;
+}
+
+/* ===================================
+   VIDEO SCAN PILL - Match Comic Library
+   =================================== */
+
+#videoScanPill {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 6px 12px !important;
+  font-size: 11px !important;
+  border-radius: 12px !important;
+  background: rgba(255,255,255,.06) !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+}
+
+#videoScanText {
+  font-weight: 600 !important;
+  color: rgba(255,255,255,.85) !important;
+}
+
+#videoScanCancel {
+  width: 20px !important;
+  height: 20px !important;
+  padding: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  background: rgba(0,0,0,.35) !important;
+  color: rgba(229,231,235,.9) !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  font-weight: 900 !important;
+  font-size: 12px !important;
+  transition: all 90ms ease-out !important;
+}
+
+#videoScanCancel:hover {
+  background: rgba(0,0,0,.5) !important;
+  transform: scale(1.05) !important;
+}
+
+/* ===================================
+   ENSURE COMIC LIBRARY UNCHANGED
+   =================================== */
+
+/* These selectors ensure we don't touch comic library */
+#libraryView .seriesGrid,
+#libraryView .seriesCard,
+#libraryView .continuePanel,
+#libraryView .contTile,
+#seriesGrid:not(#videoShowsGrid),
+.continueYacRow .contTile {
+  /* Comic library uses original styles - do not override */
+}
+
+/* ===================================
+   VIDEO SCROLLBARS - Match Comic Library
+   =================================== */
+
+#videoShowsGrid::-webkit-scrollbar,
+.videoContinueRow::-webkit-scrollbar,
+#videoEpisodesGrid::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+#videoShowsGrid::-webkit-scrollbar-track,
+.videoContinueRow::-webkit-scrollbar-track,
+#videoEpisodesGrid::-webkit-scrollbar-track {
+  background: rgba(255,255,255,.04);
+}
+
+#videoShowsGrid::-webkit-scrollbar-thumb,
+.videoContinueRow::-webkit-scrollbar-thumb,
+#videoEpisodesGrid::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.10);
+  border: 3px solid rgba(0,0,0,0);
+  background-clip: padding-box;
+  border-radius: 8px;
+}
+
+#videoShowsGrid::-webkit-scrollbar-thumb:hover,
+.videoContinueRow::-webkit-scrollbar-thumb:hover,
+#videoEpisodesGrid::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,.15);
+  background-clip: padding-box;
+}

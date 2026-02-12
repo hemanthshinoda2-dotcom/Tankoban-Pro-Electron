@@ -1,0 +1,836 @@
+<!--
+AI_NAV: index.html
+OWNERSHIP: Renderer markup skeleton. Owns the top header area, mode switch controls, and containers for library views + video stage.
+
+HOW TO NAVIGATE
+- Search: AI_ANCHOR:
+- Search: AI_HEADER / AI_VIDEO_STAGE / AI_SIDEBAR / AI_CONTINUE_SHELF
+- Navigation comments only. Do not change behavior unless a work order explicitly says so.
+
+COMMON ANCHORS
+- AI_ANCHOR: Header title element (Library)
+- AI_ANCHOR: Mode switch controls (Comics/Videos)
+- AI_ANCHOR: Video stage container (#videoStage / #mpvHost)
+- AI_ANCHOR: Continue Watching shelf container
+-->
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Tankoban</title>
+  <link rel="stylesheet" href="./styles/styles.css"/>
+  <!-- EXPERIMENT: visual overhaul layer (loaded after baseline styles) -->
+  <link rel="stylesheet" href="./styles/overhaul.css"/>
+  <!-- Video library refinements (matches comic library UI) -->
+  <link rel="stylesheet" href="./styles/video-library-match.css"/>
+</head>
+<body>
+  <!-- EXPERIMENT: background layer (purely visual; never touched by JS) -->
+  <div class="bgFx" aria-hidden="true"></div>
+  <div id="app">
+    <header class="topbar">
+      <div class="tbLeft">
+        <button id="libMenuBtn" class="iconBtn" title="Library menu" aria-label="Library menu" aria-expanded="false">☰</button>
+        <button id="libBackBtn" class="iconBtn" title="Back" aria-label="Back">◀</button>
+        <button id="libForwardBtn" class="iconBtn" title="Forward" aria-label="Forward" disabled>▶</button>
+        <button id="refreshBtn" class="iconBtn" title="Refresh" aria-label="Refresh">⟳</button>
+      </div>
+
+      <div class="tbCenter">        <!-- AI_HEADER: Top bar / mode switch markup starts around here. -->
+        <!-- AI_ANCHOR: Header title and spacing issues are usually fixed in styles.css rules for this region. -->
+        <div class="modeSwitch" aria-label="Mode switch">
+          <button id="modeComicsBtn" class="modeBtn active" title="Comics">Comics</button>
+          <button id="modeVideosBtn" class="modeBtn" title="Videos">Videos</button>
+        </div>
+      </div>
+
+      <div class="tbRight">
+        <button id="tileDensityBtn" class="btn btn-ghost btn-sm" title="Tile size">Tiles: Large</button>
+        <button id="hiddenSeriesBtn" class="btn btn-ghost btn-sm" title="Hidden series">Hidden</button>
+
+        <!-- Global search across library -->
+        <div class="globalSearchWrap compact">
+          <input id="globalSearch" class="search globalSearch" placeholder="Search…" autocomplete="off" />
+          <div id="globalSearchResults" class="searchResults hidden" role="listbox" aria-label="Search results"></div>
+        </div>
+
+        <!-- Build 36: Windows provides native title bar controls now (hidden, but kept for legacy bindings). -->
+        <button id="minimizeBtn" class="iconBtn winChromeHidden" title="Minimize" aria-label="Minimize">_</button>
+        <button id="libFsBtn" class="iconBtn winChromeHidden" title="Exit fullscreen" aria-label="Exit fullscreen">⛶</button>
+        <button id="closeBtn" class="iconBtn winChromeHidden" title="Close" aria-label="Close">×</button>
+      </div>
+    </header>
+
+    <!-- Off-canvas library drawer backdrop (used when sidebar is hidden) -->
+    <div id="libDrawerBackdrop" class="drawerBackdrop" aria-hidden="true"></div>
+
+    <main>
+      <!-- Library view -->
+      <section id="libraryView" class="view">
+        <div class="libraryShell">
+          <aside class="libSidebar" aria-label="Library navigation">
+            <div class="navSection">
+              <div class="navHeader">Libraries</div>
+              <div class="navItems">
+                <button id="addRootBtn" class="navBtn" title="Add root library folder">＋ Add root…</button>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader">Folders</div>
+              <div class="navItems">
+                <button id="addSeriesBtn" class="navBtn" title="Add series folder">＋ Add series…</button>
+                <div id="sidebarFoldersTree" class="folderTree" role="tree" aria-label="Folders"></div>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader">App</div>
+              <div class="navItems">
+                <button id="openFileBtn" class="navBtn" title="Open File">📄 Open File…</button>
+                <button id="openSettingsBtn" class="navBtn" title="Settings">⚙ Settings</button>
+              </div>
+            </div>
+          </aside>
+
+          <div class="libContent">
+            <div id="homeView" class="homeView">
+              <div class="panel continuePanel">
+                <div class="continueHead">
+                  <div class="continueTitle">Continue Reading...</div>
+                  <div class="contTools">
+                    <label class="toggle muted tiny" title="Hide finished items">
+                      <input id="hideFinishedToggle" type="checkbox" />
+                      <span>Hide finished</span>
+                    </label>
+        <div id="libraryScanPill" class="scanPill hidden" title="Refreshing library in background">
+          <span id="libraryScanText">Refreshing…</span>
+          <button id="libraryScanCancel" class="scanPillBtn" title="Cancel refresh" aria-label="Cancel refresh">✕</button>
+        </div>
+                    <button id="clearContinueBtn" class="btn btn-ghost btn-sm" title="Clear all continue items">Clear all</button>
+                  </div>
+                </div>
+                <div id="continueRow" class="continueRow continueYacRow"></div>
+                <div id="continueEmpty" class="muted tiny hidden continueEmpty">Nothing in progress yet.</div>
+              </div>
+
+              <div id="seriesPanel" class="panel seriesPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Series</div>
+                </div>
+
+                <div id="seriesGrid" class="seriesGrid"></div>
+                <div id="seriesEmpty" class="muted tiny hidden">No series yet. Add a root library folder or a series folder.</div>
+              </div>
+            </div>
+
+            <div id="seriesView" class="seriesView hidden">
+              <div id="seriesDetailPanel" class="panel seriesPanel seriesDetailPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Volumes</div>
+                  <div class="crumb hidden" id="crumb">
+                    <button id="seriesBackBtn" class="btn btn-ghost btn-sm">← Back</button>
+                    <span id="crumbText" class="muted tiny"></span>
+                  </div>
+                </div>
+
+                <div id="volumesWrap" class="hidden volSplit">
+                  <div id="volPreviewPane" class="volPreviewPane" aria-label="Preview">
+                    <div id="volPreviewInfo" class="volPreviewInfo muted tiny">—</div>
+                    <div class="volPreviewCenter">
+                      <img id="volPreviewImg" class="volPreviewImg" alt="cover preview" />
+                    </div>
+                  </div>
+
+                  <div class="volActionStrip" role="toolbar" aria-label="Volume actions">
+                    <div class="volActionLeft">
+                      <button id="volOpenBtn" class="iconBtn" title="Open selected" aria-label="Open selected">▶</button>
+                      <div class="volActionSep"></div>
+
+                      <label class="muted tiny" for="volSort">Sort</label>
+                      <select id="volSort" class="select select-sm">
+                        <option value="numerical">Numerical</option>
+                        <option value="alphabetical">Alphabetical</option>
+                        <option value="newest">Newest</option>
+                        <option value="lastread">Last read</option>
+                      </select>
+
+                      <input id="volSearch" class="search search-sm" placeholder="Search volumes (try: vol 12)" />
+                      <button id="clearVolSearch" class="iconBtn" title="Clear search" aria-label="Clear search">×</button>
+                    </div>
+
+                    <div class="volActionRight">
+                      <label class="toggle muted tiny" title="Hide preview">
+                        <input id="volHidePreviewToggle" type="checkbox" />
+                        <span>Hide preview</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="volTableWrap" role="table" aria-label="Volumes">
+                    <div class="volTableHead" id="volTableHead" role="row">
+                      <div class="cell num" role="columnheader">#</div>
+                      <div class="cell title" role="columnheader">Title</div>
+                      <div class="cell file" role="columnheader">File Name</div>
+                      <div class="cell pages" role="columnheader">Pages</div>
+                      <div class="cell size" role="columnheader">Size</div>
+                      <div class="cell read" role="columnheader">Read</div>
+                      <div class="cell cur" role="columnheader">Current Page</div>
+                      <div class="cell date" role="columnheader">Publication Date</div>
+                    </div>
+
+                    <div class="volTableBody" id="volumesGrid" role="rowgroup"></div>
+                    <div id="volumesEmpty" class="muted tiny hidden">No CBZ files found in this folder.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+            <!-- Video library view (Build 97) -->
+      <section id="videoLibraryView" class="view hidden">
+        <div class="libraryShell">
+          <aside class="libSidebar" aria-label="Video library navigation">
+            <div class="navSection">
+              <div class="navHeader">Video Libraries</div>
+              <div class="navItems">
+                <button id="videoAddFolderBtn" class="navBtn" title="Add root video folder">＋ Add root folder…</button>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader">Shows</div>
+              <div class="navItems">
+                <button id="videoAddShowFolderBtn" class="navBtn" title="Add show folder">＋ Add show folder…</button>
+                <div id="videoFoldersList" class="folderTree" role="tree" aria-label="Shows"></div>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader">Actions</div>
+              <div class="navItems">
+                <button id="videoAddFilesBtn" class="navBtn" title="Add video files">＋ Add files…</button>
+                <button id="videoRestoreHiddenBtn" class="navBtn" title="Restore hidden shows">↺ Restore hidden</button>
+                <button id="videoOpenFileBtn" class="navBtn" title="Open video file">📄 Open file…</button>
+                <button id="videoRefreshBtn" class="navBtn" title="Refresh library">⟳ Refresh</button>
+              </div>
+            </div>
+          </aside>
+
+          <div class="libContent">
+            <div id="videoHomeView" class="homeView">
+              <div class="panel continuePanel">
+                <div class="continueHead">
+                  <div class="continueTitle">Continue Watching...</div>
+                  <div class="contTools">
+                    <label class="toggle muted tiny" title="Hide finished shows">
+                      <input id="videoHideWatchedToggle" type="checkbox" />
+                      <span>Hide watched</span>
+                    </label>
+                    <div id="videoScanPill" class="scanPill hidden" title="Refreshing library in background">
+                      <span id="videoScanText">Refreshing…</span>
+                      <button id="videoScanCancel" class="scanPillBtn" title="Cancel refresh" aria-label="Cancel refresh">✕</button>
+                    </div>
+                  </div>
+                </div>
+                <div id="videoContinuePanel" class="continueRow continueYacRow"></div>
+                <div id="videoContinueList" class="videoContinueList"></div>
+                <div id="videoContinueEmpty" class="muted tiny hidden continueEmpty">Nothing in progress yet.</div>
+              </div>
+
+              <div id="videoShowsPanel" class="panel seriesPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Shows</div>
+                  <div id="videoRootLabel" class="muted tiny"></div>
+                </div>
+
+                <div id="videoShowsGrid" class="seriesGrid"></div>
+                <div id="videoShowsEmpty" class="muted tiny hidden">No shows yet. Add a root folder or a show folder.</div>
+              </div>
+            </div>
+
+            <div id="videoShowView" class="seriesView hidden">
+              <div id="videoShowDetailPanel" class="panel seriesPanel seriesDetailPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Episodes</div>
+                  <div class="crumb hidden" id="videoCrumb">
+                    <button id="videoShowBackBtn" class="btn btn-ghost btn-sm">← Back</button>
+                    <span id="videoCrumbText" class="muted tiny"></span>
+                  </div>
+                </div>
+
+                <div id="videoEpisodesWrap" class="hidden volSplit">
+                  <div id="videoEpPreviewPane" class="volPreviewPane" aria-label="Preview">
+                    <div id="videoEpPreviewInfo" class="volPreviewInfo muted tiny">—</div>
+                    <!-- Build 11: Videos folder "Continue watching" panel (replaces episode search). -->
+                    <div id="videoFolderContinue" class="videoFolderContinue hidden" aria-label="Continue watching"></div>
+                    <div class="volPreviewCenter">
+                      <img id="videoEpPreviewImg" class="volPreviewImg" alt="episode preview" />
+                    </div>
+                  </div>
+
+                  <div class="volActionStrip" role="toolbar" aria-label="Episode actions">
+                    <div class="volActionLeft">
+                      <button id="videoEpOpenBtn" class="iconBtn" title="Play selected" aria-label="Play selected">▶</button>
+                      <div class="volActionSep"></div>
+
+                      <label class="muted tiny" for="videoEpSort">Sort</label>
+                      <select id="videoEpSort" class="select select-sm">
+                        <option value="title_asc">Title (A-Z)</option>
+                        <option value="title_desc">Title (Z-A)</option>
+                        <option value="date_new">Newest</option>
+                        <option value="date_old">Oldest</option>
+                      </select>
+
+                      <!-- Build 11: removed episode search (replaced by Continue watching in preview area) -->
+                    </div>
+
+                    <div class="volActionRight">
+                      <label class="toggle muted tiny" title="Hide preview">
+                        <input id="videoEpHidePreviewToggle" type="checkbox" />
+                        <span>Hide preview</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="volTableWrap" role="table" aria-label="Episodes">
+                    <div class="volTableHead" id="videoEpTableHead" role="row">
+                      <div class="cell num" role="columnheader">#</div>
+                      <div class="cell title" role="columnheader">Episode</div>
+                      <div class="cell size" role="columnheader">Size</div>
+                      <div class="cell duration" role="columnheader">Duration</div>
+                      <div class="cell resolution" role="columnheader">Resolution</div>
+                      <div class="cell progress" role="columnheader">Progress</div>
+                      <div class="cell date" role="columnheader">Modified</div>
+                    
+                    </div>
+
+                                        <div class="volTableBody" id="videoEpisodesGrid" role="rowgroup"></div>
+                    <div id="videoEpisodesEmpty" class="muted tiny hidden">No video files found in this folder.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+<!-- Video player view (Tankoban Plus Build 3) -->
+      <section id="videoPlayerView" class="view hidden">
+        <div class="videoPlayerShell">
+          <div class="videoPlayerBar">
+            <button id="videoBackBtn" class="iconBtn" title="Back to video library" aria-label="Back to video library">←</button>
+            <div id="videoNowTitle" class="videoNowTitle">—</div>
+            <div class="videoPlayerBarRight">
+              <button id="videoTracksBtnTop" class="chipBtn" title="Audio & Subtitles" aria-label="Audio & Subtitles">Tracks</button>
+              <button id="videoSpeedBtnTop" class="chipBtn" title="Playback speed" aria-label="Playback speed">1.0×</button>
+              <button id="videoPlaylistBtn" class="chipBtn" title="Playlist" aria-label="Playlist">List</button>
+              <button id="videoQualityBtnTop" class="chipBtn" title="Render quality" aria-label="Render quality">Balanced</button>
+              <button id="videoInfoBtnTop" class="chipBtn" title="Player information" aria-label="Player information">Info</button>
+              <button id="videoFullscreenBtnTop" class="chipBtn" title="Fullscreen" aria-label="Fullscreen">⤢</button>
+            </div>
+          </div>
+
+          <!-- AI_VIDEO_STAGE: Player stage markup. Canvas render will mount here. -->
+          <!-- AI_ANCHOR: videoStage, mpvHost, overlays (toast, center flash) live in this region. -->
+          <div id="videoStage" class="videoStage">
+            <div id="mpvDetachedPlaceholder" class="mpvDetachedPlaceholder hidden" role="status" aria-live="polite">Playing in the separate mpv window…</div>
+
+            <div id="mpvHost" class="mpvHost hidden"></div>
+
+            <div id="videoCenterFlash" class="videoCenterFlash hidden" aria-hidden="true"></div>
+
+            <div id="videoDiagnostics" class="videoDiagnostics hidden" aria-live="polite"></div>
+
+            <!-- BUILD 101: Fullscreen exit arrow (only visible when fullscreen + HUD shown) -->
+            <button id="videoExitFullscreenBtn" title="Exit fullscreen" aria-label="Exit fullscreen" type="button">←</button>
+
+            <!-- BUILD64: Comprehensive right-click context menu (VLC/PotPlayer baseline) -->
+            <div id="videoCtxMenu" class="videoCtxMenu hidden" role="menu" aria-label="Video menu">
+              <button class="ctxItem" data-act="togglePlay" role="menuitem">
+                <span class="ctxLabel">Play/Pause</span>
+                <span class="ctxHotkey">Space</span>
+              </button>
+              <button class="ctxItem" data-act="stop" role="menuitem">
+                <span class="ctxLabel">Stop</span>
+              </button>
+              <button class="ctxItem" data-act="restart" role="menuitem">
+                <span class="ctxLabel">Restart from beginning</span>
+                <span class="ctxHotkey">Home</span>
+              </button>
+              <div class="ctxSep" role="separator"></div>
+              
+              <button class="ctxItem" data-act="seekBack10" role="menuitem">
+                <span class="ctxLabel">Jump back 10s</span>
+                <span class="ctxHotkey">←</span>
+              </button>
+              <button class="ctxItem" data-act="seekForward10" role="menuitem">
+                <span class="ctxLabel">Jump forward 10s</span>
+                <span class="ctxHotkey">→</span>
+              </button>
+              <button class="ctxItem" data-act="seekBack30" role="menuitem">
+                <span class="ctxLabel">Jump back 30s</span>
+                <span class="ctxHotkey">Shift+←</span>
+              </button>
+              <button class="ctxItem" data-act="seekForward30" role="menuitem">
+                <span class="ctxLabel">Jump forward 30s</span>
+                <span class="ctxHotkey">Shift+→</span>
+              </button>
+              <div class="ctxSep" role="separator"></div>
+              
+              <button class="ctxItem" data-act="prevEpisode" role="menuitem">
+                <span class="ctxLabel">Previous</span>
+                <span class="ctxHotkey">P</span>
+              </button>
+              <button class="ctxItem" data-act="nextEpisode" role="menuitem">
+                <span class="ctxLabel">Next</span>
+                <span class="ctxHotkey">N</span>
+              </button>
+              <div class="ctxSep" role="separator"></div>
+              
+              <!-- Speed submenu -->
+              <div class="ctxSubmenu">
+                <button class="ctxItem ctxExpandable" data-submenu="speed" role="menuitem">
+                  <span class="ctxLabel">Speed</span>
+                  <span class="ctxArrow">►</span>
+                </button>
+                <div class="ctxSubmenuPanel hidden" data-submenu-id="speed" role="menu">
+                  <button class="ctxItem" data-act="speed" data-speed="0.5" role="menuitem">0.5×</button>
+                  <button class="ctxItem" data-act="speed" data-speed="0.75" role="menuitem">0.75×</button>
+                  <button class="ctxItem" data-act="speed" data-speed="1" role="menuitem">1.0× (Normal)</button>
+                  <button class="ctxItem" data-act="speed" data-speed="1.25" role="menuitem">1.25×</button>
+                  <button class="ctxItem" data-act="speed" data-speed="1.5" role="menuitem">1.5×</button>
+                  <button class="ctxItem" data-act="speed" data-speed="2" role="menuitem">2.0×</button>
+                </div>
+              </div>
+              
+              <!-- Audio submenu -->
+              <div class="ctxSubmenu">
+                <button class="ctxItem ctxExpandable" data-submenu="audio" role="menuitem">
+                  <span class="ctxLabel">Audio</span>
+                  <span class="ctxArrow">►</span>
+                </button>
+                <div class="ctxSubmenuPanel hidden" data-submenu-id="audio" role="menu">
+                  <div id="ctxAudioTracks"></div>
+                  <div class="ctxSep" role="separator"></div>
+                  <button class="ctxItem" data-act="audioDelayInc" role="menuitem">Delay +50ms</button>
+                  <button class="ctxItem" data-act="audioDelayDec" role="menuitem">Delay -50ms</button>
+                  <button class="ctxItem" data-act="audioDelayReset" role="menuitem">Reset delay</button>
+                </div>
+              </div>
+              
+              <!-- Subtitles submenu -->
+              <div class="ctxSubmenu">
+                <button class="ctxItem ctxExpandable" data-submenu="subtitles" role="menuitem">
+                  <span class="ctxLabel">Subtitles</span>
+                  <span class="ctxArrow">►</span>
+                </button>
+                <div class="ctxSubmenuPanel hidden" data-submenu-id="subtitles" role="menu">
+                  <div id="ctxSubtitleTracks"></div>
+                  <div class="ctxSep" role="separator"></div>
+                  <button class="ctxItem" data-act="subDelayInc" role="menuitem">Delay +50ms</button>
+                  <button class="ctxItem" data-act="subDelayDec" role="menuitem">Delay -50ms</button>
+                  <button class="ctxItem" data-act="subDelayReset" role="menuitem">Reset delay</button>
+                  <div class="ctxSep" role="separator"></div>
+                  <button class="ctxItem" data-act="loadSubtitle" role="menuitem">Load external subtitle...</button>
+                </div>
+              </div>
+              
+              <!-- Video submenu -->
+              <div class="ctxSubmenu">
+                <button class="ctxItem ctxExpandable" data-submenu="video" role="menuitem">
+                  <span class="ctxLabel">Video</span>
+                  <span class="ctxArrow">►</span>
+                </button>
+                <div class="ctxSubmenuPanel hidden" data-submenu-id="video" role="menu">
+                  <div id="ctxAspectRatios"></div>
+                  <div class="ctxSep" role="separator"></div>
+                  <button class="ctxItem" data-act="screenshot" role="menuitem">Screenshot</button>
+                </div>
+              </div>
+              
+              <div class="ctxSep" role="separator"></div>
+              
+              <button class="ctxItem" data-act="openFile" role="menuitem">
+                <span class="ctxLabel">Open File...</span>
+              </button>
+              
+              <div class="ctxSep" role="separator"></div>
+              
+              <button class="ctxItem" data-act="alwaysOnTop" role="menuitem">
+                <span class="ctxLabel" id="ctxAlwaysOnTopLabel">Always on Top</span>
+                <span class="ctxCheck" id="ctxAlwaysOnTopCheck">✓</span>
+              </button>
+              
+              <button class="ctxItem" data-act="toggleFullscreen" role="menuitem">
+                <span class="ctxLabel">Fullscreen</span>
+                <span class="ctxHotkey">F</span>
+              </button>
+            </div>
+
+
+            <!-- BUILD 66: Ultra-thin timeline with minimal play/pause button -->
+            <div id="videoHud" class="videoHud videoHud--minimal">
+              <button id="videoPrevHudBtn" class="minimalNavBtn" title="Previous episode" aria-label="Previous episode">⟵</button>
+              <button id="videoPlayBtn" class="minimalPlayBtn" title="Play or pause" aria-label="Play or pause">⏵</button>
+              <button id="videoNextHudBtn" class="minimalNavBtn" title="Next episode" aria-label="Next episode">⟶</button>
+              <div id="videoScrub" class="scrub videoScrub videoScrub--minimal" role="slider" tabindex="0"
+                   aria-label="Timeline"
+                   aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00">
+                <div id="videoScrubTrack" class="scrubTrack"></div>
+                <div id="videoScrubChapters" class="scrubChapters" aria-hidden="true"></div>
+                <div id="videoScrubFill" class="scrubFill"></div>
+                <div id="videoScrubThumb" class="scrubThumb">
+                  <div id="videoScrubBubble" class="scrubBubble mono">0:00</div>
+                </div>
+              </div>
+              <!-- BUILD 69: Always-visible time display -->
+              <div id="videoTimeNow" class="videoTimeDisplay mono">0:00 / 0:00</div>
+            </div>
+
+            <!-- Tankoban Plus Build 5.4A: Track selectors (mpv capabilities) -->
+            <div id="videoTracksPanel" class="videoTracksPanel hidden" role="dialog" aria-modal="false" aria-label="Audio and Subtitles">
+              <div class="videoTracksCard">
+                <div class="videoTracksHeader">
+                  <div class="videoTracksTitle">Audio & Subtitles</div>
+                  <button id="videoTracksCloseBtn" class="iconBtn" title="Close" aria-label="Close">✕</button>
+                </div>
+                <div class="videoTracksBody">
+                  <label class="tracksLabel" for="videoAudioTrackSelect">Audio</label>
+                  <select id="videoAudioTrackSelect" class="tracksSelect" aria-label="Audio track"></select>
+                  <label class="tracksLabel" for="videoSubtitleTrackSelect">Subtitles</label>
+                  <select id="videoSubtitleTrackSelect" class="tracksSelect" aria-label="Subtitle track"></select>
+
+                  
+                  <label class="tracksLabel" for="videoLoadSubtitleBtn">External subtitle</label>
+                  <button id="videoLoadSubtitleBtn" class="tracksBtn" title="Load subtitle file" aria-label="Load subtitle file">Load…</button>
+
+
+                  <div class="tracksDivider"></div>
+
+                  <label class="tracksLabel" for="videoRespectSubStylesToggle">Subtitle style</label>
+                  <label class="tracksToggle">
+                    <input id="videoRespectSubStylesToggle" type="checkbox" />
+                    <span>Respect embedded styles (ASS)</span>
+                  </label>
+                  <div class="tracksHint">If anime subtitles look too plain, enable this to preserve typesetting.</div>
+
+                  <div class="tracksDivider"></div>
+
+                  <!-- Build 60: Speed controls moved to separate panel -->
+
+                  <!-- Tankoban Plus Build 5.4B — Delay controls (mpv only)
+                       INTENT: Quick audio/subtitle sync delay adjustments without changing overlay behavior. -->
+                  <label class="tracksLabel" for="videoAudioDelayMinusBtn">Audio delay</label>
+                  <div id="videoAudioDelayControls" class="delayControls" aria-label="Audio delay controls">
+                    <button id="videoAudioDelayMinusBtn" class="delayBtn" title="Audio delay minus" aria-label="Audio delay minus">−</button>
+                    <span id="videoAudioDelayValue" class="delayValue" aria-label="Audio delay value">0.00s</span>
+                    <button id="videoAudioDelayPlusBtn" class="delayBtn" title="Audio delay plus" aria-label="Audio delay plus">+</button>
+                  </div>
+
+                  <label class="tracksLabel" for="videoSubtitleDelayMinusBtn">Subtitle delay</label>
+                  <div id="videoSubtitleDelayControls" class="delayControls" aria-label="Subtitle delay controls">
+                    <button id="videoSubtitleDelayMinusBtn" class="delayBtn" title="Subtitle delay minus" aria-label="Subtitle delay minus">−</button>
+                    <span id="videoSubtitleDelayValue" class="delayValue" aria-label="Subtitle delay value">0.00s</span>
+                    <button id="videoSubtitleDelayPlusBtn" class="delayBtn" title="Subtitle delay plus" aria-label="Subtitle delay plus">+</button>
+                  </div>
+
+<!-- Tankoban Plus Build 5.4C — Aspect / crop presets + reset (mpv only)
+     INTENT: Expose basic transform controls without changing the player overlay model. -->
+<div id="videoTransformsBlock" class="transformsBlock hidden">
+  <label class="tracksLabel" for="videoAspectSelect">Aspect</label>
+  <select id="videoAspectSelect" class="tracksSelect" aria-label="Aspect ratio preset">
+    <option value="auto">Auto</option>
+    <option value="16:9">16:9</option>
+    <option value="4:3">4:3</option>
+    <option value="1:1">1:1</option>
+    <option value="21:9">21:9</option>
+    <option value="custom" disabled>Custom</option>
+  </select>
+
+  <label class="tracksLabel" for="videoCropSelect">Crop</label>
+  <select id="videoCropSelect" class="tracksSelect" aria-label="Crop preset">
+    <option value="none">None</option>
+    <option value="16:9">16:9</option>
+    <option value="4:3">4:3</option>
+    <option value="1:1">1:1</option>
+    <option value="21:9">21:9</option>
+    <option value="custom" disabled>Custom</option>
+  </select>
+
+  <label class="tracksLabel" for="videoResetTransformsBtn">Transforms</label>
+  <button id="videoResetTransformsBtn" class="tracksBtn" title="Reset aspect and crop" aria-label="Reset aspect and crop">Reset</button>
+</div>
+
+                </div>
+              </div>
+            </div>
+
+            <!-- Build 67: Anchored speed popover -->
+            <div id="videoSpeedPanel" class="videoAnchoredPopover hidden" role="dialog" aria-label="Playback speed">
+              <div class="anchoredPopoverContent">
+                <button id="videoSpeedDownBtnPanel" class="popoverBtn" aria-label="Decrease speed">−</button>
+                <div id="videoSpeedPanelValue" class="popoverValue mono">1.0×</div>
+                <button id="videoSpeedUpBtnPanel" class="popoverBtn" aria-label="Increase speed">+</button>
+              </div>
+            </div>
+
+            <!-- Build 67: Anchored volume popover -->
+            <div id="videoVolPanel" class="videoAnchoredPopover hidden" role="dialog" aria-label="Volume">
+              <div class="anchoredPopoverContent anchoredPopoverVertical">
+                <div id="videoVolPct" class="popoverValue mono">100%</div>
+                <input id="videoVol" class="popoverSlider" type="range" min="0" max="100" value="100" step="1" orient="vertical" aria-label="Volume" />
+                <button id="videoVolMuteToggleBtn" class="popoverBtn" aria-label="Mute">🔇</button>
+              </div>
+            </div>
+
+            <div id="videoPlaylistPanel" class="hudPanel hidden" role="dialog" aria-label="Playlist">
+              <div class="panelHeader">
+                <div class="panelTitleWrap">
+                  <div class="panelTitle">Playlist</div>
+                  <div id="videoPlaylistFolder" class="panelSub mono"></div>
+                </div>
+
+                <div class="panelHeaderActions">
+                  <label class="panelToggle">
+                    <input id="videoAutoAdvanceToggle" type="checkbox" />
+                    <span>Auto-advance</span>
+                  </label>
+                  <button id="videoPlaylistCloseBtn" class="iconBtn panelCloseBtn" aria-label="Close">✕</button>
+                </div>
+              </div>
+
+              <div class="panelBody">
+                <div class="panelRow">
+                  <button id="videoPrevEpBtn" class="panelBtn" aria-label="Previous episode">← Prev</button>
+                  <button id="videoNextEpBtn" class="panelBtn" aria-label="Next episode">Next →</button>
+                </div>
+
+                <div id="videoPlaylistList" class="panelList" role="listbox" aria-label="Episodes"></div>
+              </div>
+            </div>
+
+<div id="videoToast" class="videoToast hidden" role="status" aria-live="polite"></div>
+
+            <div id="videoResumePrompt" class="videoPrompt hidden" role="dialog" aria-modal="true">
+              <div class="videoPromptCard">
+                <div class="videoPromptTitle">Resume playback?</div>
+                <div id="videoResumeText" class="videoPromptText">—</div>
+                <div class="videoPromptActions">
+                  <button id="videoResumeBtn" class="primaryBtn">Resume</button>
+                  <button id="videoRestartBtn" class="navBtn">Start over</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- FIND_THIS:CONTEXT_MENU_CONTAINER -->
+      <div id="contextMenu" class="contextMenu hidden" role="menu" aria-hidden="true"></div>
+
+      <!-- Player view (injected) -->
+      <div id="readerViewMount"></div>
+      <script>
+        (() => {
+          const mount = document.getElementById('readerViewMount');
+          if (!mount) return;
+          try {
+            const req = new XMLHttpRequest();
+            req.open('GET', './domains/reader/reader_view.html', false);
+            req.send(null);
+            if (req.status >= 200 && req.status < 400) {
+              mount.outerHTML = req.responseText;
+            } else {
+              console.error('Failed to load reader_view.html', req.status);
+            }
+          } catch (err) {
+            console.error('Failed to inject reader view markup', err);
+          }
+        })();
+      </script>
+    </main>
+
+    <!-- Library Settings overlay -->
+    <div id="librarySettingsOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Settings">
+      <div class="settingsCard">
+        <div class="settingsTop">
+          <div class="settingsTitle">Settings</div>
+          <button id="settingsClose" class="btn btn-ghost btn-sm">Close</button>
+        </div>
+
+        <div class="settingsGroup">
+          <label class="settingsLabel" for="settingsAutoBase">Auto Scroll base seconds per screen (Preset 1)</label>
+          <input id="settingsAutoBase" type="number" min="5" max="60" step="1" class="search settingsNum" />
+          <div class="muted tiny">How long Auto Scroll takes to move one full screen at Preset 1.</div>
+        </div>
+
+        <div class="settingsGroup">
+          <label class="settingsLabel" for="settingsAutoStep">Auto Scroll step percentage</label>
+          <input id="settingsAutoStep" type="number" min="1" max="50" step="1" class="search settingsNum" />
+          <div class="muted tiny">How much each speed step changes Auto Scroll (as a percent).</div>
+        </div>
+
+        <div class="settingsGroup">
+          <label class="settingsLabel" for="settingsScanIgnore">Library scan ignore patterns (one per line)</label>
+          <textarea id="settingsScanIgnore" class="search settingsTextArea" rows="4" spellcheck="false"></textarea>
+          <div class="muted tiny">
+            Matches are case-insensitive substring checks against full paths (folders + files). Hidden folders and common junk dirs are ignored automatically.
+          </div>
+        </div>
+
+        <div class="settingsActions">
+          <button id="settingsSave" class="btn">Save</button>
+          <button id="settingsReset" class="btn btn-ghost">Reset to defaults</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="hiddenSeriesOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Hidden series">
+      <div class="settingsCard">
+        <div class="settingsTop">
+          <div class="settingsTitle">Hidden series</div>
+          <button id="hiddenSeriesClose" class="btn btn-ghost btn-sm">Close</button>
+        </div>
+
+        <div class="muted tiny">
+          Hidden series are folders removed from the library and kept out of scans until restored.
+        </div>
+
+        <div id="hiddenSeriesList" class="hiddenSeriesList"></div>
+
+        <div class="settingsActions">
+          <button id="clearIgnoredBtn" class="btn btn-ghost">Clear ignore list…</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Debug overlay (default-off). Enabled via MANGA_SCROLLER_DEBUG=1 at launch. -->
+    <div id="debugOverlay" class="debugOverlay hidden" aria-hidden="true"></div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <div id="warmupBar" class="warmupBar hidden">
+      <div id="warmupText" class="warmupText">Generating thumbnails…</div>
+      <button id="warmupCancel" class="btn btn-ghost btn-sm">Cancel</button>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loadingOverlay" class="loadingOverlay hidden" aria-live="polite">
+      <div class="loadingCard">
+        <div class="spinner" aria-hidden="true"></div>
+        <div class="loadingText">
+          <div id="loadingTitle" class="loadingTitle">Loading…</div>
+          <div id="loadingSub" class="loadingSub muted tiny"></div>
+          <div class="loadingBarWrap">
+            <div id="loadingBar" class="loadingBar"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Keymap overlay -->
+    <div id="keysOverlay" class="keysOverlay hidden" role="dialog" aria-modal="true">
+      <div class="keysCard">
+        <div class="keysTop">
+          <div class="keysTitle">Keys</div>
+          <button id="keysClose" class="btn btn-ghost btn-sm">Close</button>
+        </div>
+
+        <div class="keysCols">
+          <div class="keysCol">
+            <div class="keysHead">Player</div>
+            <div class="keysLine"><span class="key">M</span><span class="desc">Cycle reading mode</span></div>
+            <div class="keysLine"><span class="key">F</span><span class="desc">Toggle fullscreen</span></div>
+            <div class="keysLine"><span class="key">K</span><span class="desc">Show or hide this overlay</span></div>
+            <div class="keysLine"><span class="key">F11</span><span class="desc">Toggle fullscreen</span></div>
+            <div class="keysLine"><span class="key">I</span><span class="desc">Invert next or previous sides (Two-Page flick modes only)</span></div>
+            <div class="keysLine"><span class="key">P</span><span class="desc">Coupling nudge toggle (shift pairing by 1 where supported)</span></div>
+            <div class="keysLine"><span class="key">L</span><span class="desc">Toggle Loupe (magnifier Heads Up Display)</span></div>
+            <div class="keysLine"><span class="key">Mouse wheel</span><span class="desc">Scroll (Long Strip) / Scrub pages (Auto)</span></div>
+            <div class="keysLine"><span class="key">Up / Down</span><span class="desc">Scroll (Long Strip / Double Page Scroll) • Pan overflow (MangaPlus Fit Width)</span></div>
+            <div class="keysLine"><span class="key">Shift + Up / Down</span><span class="desc">Bigger vertical steps (where supported)</span></div>
+            <div class="keysLine"><span class="key">Space / Enter</span><span class="desc">Play / pause (Auto + Auto Flip)</span></div>
+            <div class="keysLine"><span class="key">Numpad Enter</span><span class="desc">Confirm Go-to (when open)</span></div>
+            <div class="keysLine"><span class="key">, / .</span><span class="desc">Adjust scroll speed (Auto only)</span></div>
+            <div class="keysLine"><span class="key">Left / Right</span><span class="desc">Prev / next page</span></div>
+            <div class="keysLine"><span class="key">Page Up / Page Down</span><span class="desc">Prev / next page</span></div>
+            <div class="keysLine"><span class="key">Home / End</span><span class="desc">First / last page</span></div>
+            <div class="keysLine"><span class="key">Shift</span><span class="desc">Turbo scroll (Auto)</span></div>
+            <div class="keysLine"><span class="key">Control</span><span class="desc">Brake scroll (Auto)</span></div>
+            <div class="keysLine"><span class="key">Control + 0</span><span class="desc">Reset to defaults</span></div>
+            <div class="keysLine"><span class="key">Control + R</span><span class="desc">Refresh library</span></div>
+            <div class="keysLine"><span class="key">Control + M</span><span class="desc">Minimize</span></div>
+            <div class="keysLine"><span class="key">Control + Q</span><span class="desc">Quit</span></div>
+            <div class="keysLine"><span class="key">H</span><span class="desc">Toggle Heads Up Display</span></div>
+            <div class="keysLine"><span class="key">O</span><span class="desc">Open Volume Navigator</span></div>
+            <div class="keysLine"><span class="key">Z</span><span class="desc">Replay</span></div>
+            <div class="keysLine"><span class="key">Backspace</span><span class="desc">Back to library</span></div>
+            <div class="keysLine"><span class="key">R</span><span class="desc">Clear resume point</span></div>
+            <div class="keysLine"><span class="key">S</span><span class="desc">Save resume point</span></div>
+            <div class="keysLine"><span class="key">Escape</span><span class="desc">Hide HUD / close overlays / exit fullscreen</span></div>
+          </div>
+
+          <div class="keysCol">
+            <div class="keysHead">Library</div>
+            <div class="keysLine"><span class="key">A</span><span class="desc">Add series folder</span></div>
+            <div class="keysLine"><span class="key">Backspace</span><span class="desc">Back / clear selection</span></div>
+            <div class="keysLine"><span class="key">F</span><span class="desc">Toggle fullscreen</span></div>
+            <div class="keysLine"><span class="key">F11</span><span class="desc">Toggle fullscreen</span></div>
+            <div class="keysLine"><span class="key">Control + R</span><span class="desc">Refresh library</span></div>
+            <div class="keysLine"><span class="key">Control + 0</span><span class="desc">Reset to defaults</span></div>
+            <div class="keysLine"><span class="key">Control + M</span><span class="desc">Minimize</span></div>
+            <div class="keysLine"><span class="key">Control + Q</span><span class="desc">Quit</span></div>
+            <div class="keysLine"><span class="key">K</span><span class="desc">Show or hide this overlay</span></div>
+            <div class="keysLine"><span class="key">Escape</span><span class="desc">Close overlay (when open)</span></div>
+          </div>
+        </div>
+
+        <div class="keysHint muted tiny">Press K again or Escape to close. Keys do not override typing in search boxes.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 6: Renderer API gateway (MUST load before all other scripts) -->
+  <script src="./services/api_gateway.js"></script>
+<script src="./services/health/monitor.js"></script>
+  <!-- BUILD 88 FIX 3.2: Health check monitoring -->
+
+  <!-- Phase 7: State + domain runtime (modules below are compat shims; order preserved) -->
+  <script src="./state/bootstrap.js"></script>
+
+  <script src="./domains/shell/core.js"></script>
+  <script src="./domains/library/library.js"></script>
+  <!-- QT_ONLY: Embedded/canvas player adapter has been removed. Videos launch the external Qt player. -->
+  <script src="./domains/video/video_utils.js"></script>
+  <script src="./domains/video/build14_state.js"></script>
+  <script src="./domains/video/video.js"></script>
+  <script src="./domains/shell/shell_bindings.js"></script>
+  <script src="./domains/reader/open.js"></script>
+  <script src="./domains/reader/bitmaps.js"></script>
+  <script src="./state/reader.js"></script>
+  <script src="./domains/reader/render_portrait.js"></script>
+  <script src="./domains/reader/render_two_page.js"></script>
+  <script src="./domains/reader/render_core.js"></script>
+  <script src="./domains/reader/state_machine.js"></script>
+  <script src="./domains/reader/hud_core.js"></script>
+  <script src="./domains/reader/mega_settings.js"></script>
+  <script src="./domains/reader/volume_nav_overlay.js"></script>
+  <script src="./domains/reader/input_pointer.js"></script>
+  <script src="./domains/reader/input_keyboard.js"></script>
+  <script src="./domains/reader/boot.js"></script>
+</body>
+</html>

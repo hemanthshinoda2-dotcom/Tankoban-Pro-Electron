@@ -1,0 +1,404 @@
+<section id="playerView" class="view hidden">
+        <div class="playerBar ytHudTop">
+          <div class="ytHudRow">
+            <div class="ytTopLeft">
+              <button id="backBtn" class="iconBtn ytIcon" title="Back to library" aria-label="Back to library">←</button>
+
+              <div class="playerMeta">
+                <div id="nowTitle" class="nowTitle">—</div>
+                <div id="nowSub" class="nowSub">—</div>
+              </div>
+            </div>
+
+            <div class="ytTopRight"></div>
+          </div>
+        </div>
+
+        <div class="stageWrap">
+          <!-- Build 7 (UI-only): Build 23-style minimalist Prefs launcher -->
+          <button id="prefsCornerBtn" class="cornerPrefsBtn" title="Tools" aria-label="Tools">Tools</button>
+          <div id="autoFlipCountdown" class="autoFlipCountdown hidden"></div>
+          <canvas id="stage" width="1920" height="1080"></canvas>
+          <div class="clickZones" id="clickZones">
+            <div class="zone left"></div>
+            <div class="zone mid"></div>
+            <div class="zone right"></div>
+          </div>
+
+          <!-- Build 32: manual scroller overlay (visual only) -->
+          <div class="manualScroller" aria-hidden="true">
+            <div class="manualScrollerTrack"></div>
+            <div class="manualScrollerThumb"></div>
+          </div>
+
+          <!-- BUILD 19H_LOUPE (Build 19H)
+               INTENT: A non-interactive overlay HUD for the magnifier so it doesn't affect click zones or scrolling. -->
+          <div id="loupeHud" class="loupeHud hidden" aria-hidden="true">
+            <canvas id="loupeCanvas" width="1" height="1"></canvas>
+          </div>
+
+          <!-- End-of-volume overlay (shown when the last page finishes) -->
+          <div id="endOverlay" class="endOverlay hidden" role="dialog" aria-modal="true">
+            <div class="endCard">
+              <div class="endTitle">End of volume</div>
+              <div id="endSubtitle" class="endSub muted">—</div>
+              <div class="endActions">
+                <button id="endNextVolumeBtn" class="btn">Next volume</button>
+                <button id="endReplayBtn" class="btn btn-ghost">Replay from start</button>
+                <button id="endLibraryBtn" class="btn btn-ghost">Back to library</button>
+              </div>
+              <div class="endHint muted tiny">Space or Enter: next · Backspace: library</div>
+            </div>
+          </div>
+
+          <!-- BUILD 19H_GOTO_OVERLAY (Build 19H)
+               INTENT: Precise numeric jumps without changing scrubber behavior or keybindings. -->
+          <div id="gotoOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Go to page">
+            <div class="settingsCard gotoCard">
+              <div class="settingsTop">
+                <div class="settingsTitle">Go to page</div>
+                <button id="gotoClose" class="btn btn-ghost btn-sm">Close</button>
+              </div>
+
+              <div class="settingsGroup">
+                <label class="settingsLabel" for="gotoInput">Page number</label>
+                <input id="gotoInput" type="number" min="1" step="1" class="search settingsNum" />
+                <div id="gotoHint" class="muted tiny">—</div>
+              </div>
+
+              <div class="endActions">
+                <button id="gotoGoBtn" class="btn">Go</button>
+                <button id="gotoCancelBtn" class="btn btn-ghost">Cancel</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- BUILD 19H_IMAGE_FX_OVERLAY (Build 19H)
+               INTENT: Basic readability tuning (brightness/contrast + invert/grayscale) via CSS filter on canvas only. -->
+          <div id="imgFxOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Image filters">
+            <div class="settingsCard fxCard">
+              <div class="settingsTop">
+                <div class="settingsTitle">Image filters</div>
+                <button id="imgFxClose" class="btn btn-ghost btn-sm">Close</button>
+              </div>
+
+              <div class="settingsGroup">
+                <div class="settingsLabel">Brightness</div>
+                <div class="fxRow">
+                  <input id="imgFxBrightness" class="fxRange" type="range" min="60" max="140" step="1" />
+                  <div id="imgFxBrightnessVal" class="muted tiny fxVal">100%</div>
+                </div>
+              </div>
+
+              <div class="settingsGroup">
+                <div class="settingsLabel">Contrast</div>
+                <div class="fxRow">
+                  <input id="imgFxContrast" class="fxRange" type="range" min="60" max="140" step="1" />
+                  <div id="imgFxContrastVal" class="muted tiny fxVal">100%</div>
+                </div>
+              </div>
+
+              <div class="settingsGroup">
+                <div class="settingsLabel">Saturation</div>
+                <div class="fxRow">
+                  <input id="imgFxSaturate" class="fxRange" type="range" min="50" max="200" step="1" />
+                  <div id="imgFxSaturateVal" class="muted tiny fxVal">100%</div>
+                </div>
+              </div>
+
+              <div class="settingsGroup">
+                <div class="settingsLabel">Sepia</div>
+                <div class="fxRow">
+                  <input id="imgFxSepia" class="fxRange" type="range" min="0" max="100" step="1" />
+                  <div id="imgFxSepiaVal" class="muted tiny fxVal">0%</div>
+                </div>
+              </div>
+
+              <div class="settingsGroup">
+                <div class="settingsLabel">Hue</div>
+                <div class="fxRow">
+                  <input id="imgFxHue" class="fxRange" type="range" min="0" max="360" step="1"  value="0" />
+                  <div id="imgFxHueVal" class="muted tiny fxVal">0°</div>
+                </div>
+              </div>
+
+              <div class="settingsGroup fxChecks">
+                <label class="fxCheck"><input id="imgFxInvert" type="checkbox" /> Invert</label>
+                <label class="fxCheck"><input id="imgFxGrayscale" type="checkbox" /> Grayscale</label>
+              </div>
+
+              <div class="settingsGroup">
+                <div class="settingsLabel">Scaling</div>
+                <div class="miniControls chipRow" id="imgFxScaleQuality">
+                  <button class="chip" id="imgFxScaleOff" data-scale="off">Off</button>
+
+                  <button class="chip" id="imgFxScaleSmooth" data-scale="smooth">Smoother</button>
+                  <button class="chip" id="imgFxScaleSharp" data-scale="sharp">Sharper</button>
+                  <button class="chip" id="imgFxScalePixel" data-scale="pixel">Pixel</button>
+                </div>
+              </div>
+
+              <div class="settingsGroup">
+                <div class="settingsLabel">Presets</div>
+                <div class="miniControls chipRow" id="imgFxPresets">
+                  <button class="chip" type="button" data-preset="none">None</button>
+                  <button class="chip" type="button" data-preset="night">Night</button>
+                  <button class="chip" type="button" data-preset="soft">Soft</button>
+                  <button class="chip" type="button" data-preset="washfix">Wash fix</button>
+                </div>
+              </div>
+
+              <div class="endActions">
+                <button id="imgFxReset" class="btn btn-ghost">Reset</button>
+                <button id="imgFxDone" class="btn">Done</button>
+              </div>
+
+              <div class="muted tiny">Applies to the canvas only. No file changes.</div>
+            </div>
+          </div>
+
+          <!-- BUILD 20_LOUPE_ZOOM_OVERLAY (Build 20)
+               INTENT: Let users tune loupe zoom without changing any existing zoom/pan behaviors. -->
+          <div id="loupeZoomOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Loupe zoom">
+            <div class="settingsCard loupeCard">
+              <div class="settingsTop">
+                <div class="settingsTitle">Loupe zoom</div>
+                <button id="loupeZoomClose" class="btn btn-ghost btn-sm">Close</button>
+              </div>
+
+              <div class="settingsGroup">
+                <div class="settingsLabel">Zoom</div>
+                <div class="fxRow">
+                  <input id="loupeZoomRange" class="fxRange" type="range" min="0.50" max="3.50" step="0.05" />
+                  <div id="loupeZoomVal" class="muted tiny fxVal">2.00×</div>
+                </div>
+              </div>
+
+              <div class="settingsGroup">
+                <div class="settingsLabel">Size</div>
+                <div class="fxRow">
+                  <input id="loupeSizeRange" class="fxRange" type="range" min="140" max="640" step="5" />
+                  <div id="loupeSizeVal" class="muted tiny fxVal">220px</div>
+                </div>
+              </div>
+
+              <div class="endActions">
+                <button id="loupeZoomReset" class="btn btn-ghost">Reset</button>
+                <button id="loupeZoomDone" class="btn">Done</button>
+              </div>
+
+              <div class="muted tiny">Affects the loupe only.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="playerFooter ytHudBottom">
+          <div class="ytScrubRow">
+            <div class="scrubWrap ytScrubWrap">
+              <div class="scrubLabel muted tiny">Jump</div>
+              <div id="scrub" class="scrub" role="slider" aria-label="Jump to page">
+                <div class="scrubTrack"></div>
+                <div id="scrubFill" class="scrubFill"></div>
+                <div id="scrubThumb" class="scrubThumb">
+                  <div id="scrubBubble" class="scrubBubble mono">1</div>
+                </div>
+              </div>
+
+              <!-- Build 35: quick actions on the scrub bar (minimal symbols) -->
+              <div class="scrubActions" aria-label="Quick actions">
+                <button id="scrubModeBtn" class="scrubActionBtn" title="Modes" aria-label="Modes">◫</button>
+                <button id="scrubNavBtn" class="scrubActionBtn" title="Navigate volumes" aria-label="Navigate volumes">≡</button>
+                <button id="scrubFitBtn" class="scrubActionBtn" title="Image fit" aria-label="Image fit">⤢</button>
+                <button id="scrubWidthBtn" class="scrubActionBtn" title="Portrait width" aria-label="Portrait width">↔</button>
+              </div>
+
+              <!-- // FIND_THIS:TWO_PAGE_SCROLL_ROW_GAP_UI (Tankoban Build 5) -->
+              <div id="twoPageScrollRowGapWrap" class="twoPageScrollRowGapWrap hidden" aria-label="Row gap">
+                <div class="twoPageScrollRowGapLabel muted tiny">Row gap</div>
+                <input id="twoPageScrollRowGapInput" class="twoPageScrollRowGapInput" type="number" min="0" max="64" step="1" value="16" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Build 8: quick settings row -->
+          <!-- Build 7 (UI-only): hide the always-on quick row to match Build 23 minimalist HUD -->
+          <div id="quickSettingsRow" class="ytQuickRow hidden" role="toolbar" aria-label="Quick settings">
+            <button id="quickSpeedBtn" class="iconBtn ytIcon ytQuickIcon ytQuickSpeed" title="Scroll speed">⏱ —</button>
+            <button id="quickModeBtn" class="iconBtn ytIcon ytQuickIcon ytQuickMode" title="Toggle Auto Scroll / Manual Scroll (M)">✋</button>
+            <!-- Build 14: one-mode reader (infinite strip only). -->
+            <button id="quickWidthBtn" class="iconBtn ytIcon ytQuickIcon" title="Portrait width">↔</button>
+            <!-- Build 14: spreads are inline; no spread fit/fill toggle. -->
+            <div class="ytQuickSep" aria-hidden="true"></div>
+            <button id="volNavBtn" class="iconBtn ytIcon ytQuickIcon" title="Volumes">≡</button>
+            <button id="quickKeysBtn" class="iconBtn ytIcon ytQuickIcon" title="Keys">⌨</button>
+            <button id="quickClearResumeBtn" class="iconBtn ytIcon ytQuickIcon" title="Start volume from beginning">↺</button>
+            <button id="quickResetSeriesBtn" class="iconBtn ytIcon ytQuickIcon" title="Start series from beginning">⟲</button>
+          </div>
+
+          <!-- Build 19: scroll speed slider overlay -->
+          <div id="speedSliderOverlay" class="speedSliderOverlay hidden" aria-hidden="true">
+            <div id="speedSliderCard" class="speedSliderCard" role="dialog" aria-label="Scroll speed">
+              <div class="speedSliderTop">
+                <div class="speedSliderLabel muted tiny">Scroll speed</div>
+                <div id="speedSliderValue" class="speedSliderValue mono">—</div>
+              </div>
+              <div id="speedSliderTrack" class="speedSliderTrack" role="slider" tabindex="0"
+                   aria-label="Scroll speed"
+                   aria-valuemin="1" aria-valuemax="10" aria-valuenow="5">
+                <div id="speedSliderFill" class="speedSliderFill"></div>
+                <div id="speedSliderThumb" class="speedSliderThumb"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ytControlsRow">
+            <div class="ytLeftControls">
+              <button id="prevBtn" class="iconBtn ytIcon" title="Previous page" aria-label="Previous page">⟨</button>
+              <button id="playBtn" class="iconBtn ytIcon ytPlay" title="Play or pause" aria-label="Play or pause">▶</button>
+              <button id="nextBtn" class="iconBtn ytIcon" title="Next page" aria-label="Next page">⟩</button>
+              <span id="pageText" class="ytPageText mono">—</span>
+            </div>
+
+            <div class="ytRightControls">
+              <button id="prevVolBtn" class="iconBtn ytIcon hidden" title="Previous volume" aria-label="Previous volume">←</button>
+              <button id="nextVolBtn" class="iconBtn ytIcon hidden" title="Next volume" aria-label="Next volume">→</button>
+              <button id="playerMinBtn" class="iconBtn ytIcon" title="Minimize" aria-label="Minimize">_</button>
+              <!-- Build 11A: reader fullscreen toggle button -->
+              <button id="playerFsBtn" class="iconBtn ytIcon" title="Exit fullscreen" aria-label="Exit fullscreen">⛶</button>
+              <button id="playerCloseBtn" class="iconBtn ytIcon" title="Close" aria-label="Close">×</button>
+            </div>
+          </div>
+
+          <!-- Hidden (Build 6 will replace with Mega Settings). Keep logic + IDs intact. -->
+          <div class="hudExtras">
+            <div class="kv">
+              <span class="key">Mode</span>
+              <span id="modeText" class="v mono">—</span>
+            </div>
+            <div class="kv">
+              <span class="key">Scroll</span>
+              <span id="scrollText" class="v mono">—</span>
+            </div>
+
+            
+
+            <div class="kv">
+              <span class="key">Portrait width</span>
+              <span id="pwText" class="v mono">100%</span>
+            </div>
+            <div class="miniControls">
+              <button class="chip" data-pw="50">50%</button>
+              <button class="chip" data-pw="60">60%</button>
+              <button class="chip" data-pw="70">70%</button>
+              <button class="chip" data-pw="74">74%</button>
+              <button class="chip" data-pw="78">78%</button>
+              <button class="chip" data-pw="90">90%</button>
+              <button class="chip active" data-pw="100">100%</button>
+            </div>
+
+            <button id="clearResumeBtn" class="btn btn-ghost">Clear resume</button>
+            <button id="resetSeriesBtn" class="btn btn-ghost">Reset series</button>
+
+            <div class="hint muted tiny">H hides UI · K keys</div>
+          </div>
+        </div>
+
+        <!-- Mega Settings overlay (Build 6A) -->
+        <div id="megaSettingsOverlay" class="megaSettingsOverlay" role="dialog" aria-modal="true" aria-label="Settings">
+          <div id="megaSettingsPanel" class="megaSettingsPanel">
+            <!-- Main menu -->
+            <div id="megaMainPanel" class="megaPanel megaMainPanel">
+              <div class="megaTitle">Settings</div>
+
+              <button class="megaRow" id="megaRowSpeed" type="button">
+                <span class="megaLeft">Scroll speed</span>
+                <span class="megaRight">
+                  <span id="megaSpeedValue" class="megaValue">Speed 5</span>
+                  <span class="megaChevron">Open</span>
+                </span>
+              </button>
+
+              <!-- Build 7 (UI-only): control mode selector (menu is reused from Build 23 patterns) -->
+              <button class="megaRow" id="megaRowMode" type="button">
+                <span class="megaLeft">Mode</span>
+                <span class="megaRight">
+                  <span id="megaModeValue" class="megaValue">Manual</span>
+                  <span class="megaChevron">Open</span>
+                </span>
+              </button>
+
+              <!-- BUILD16C_AUTOFIP_INTERVAL_PREF: only shown when Mode === Auto Flip -->
+              <button class="megaRow hidden" id="megaRowAutoFlip" type="button">
+                <span class="megaLeft">Auto Flip</span>
+                <span class="megaRight">
+                  <span id="megaAutoFlipValue" class="megaValue">30s</span>
+                  <span class="megaChevron">Open</span>
+                </span>
+              </button>
+
+              <!-- BUILD8_IMAGE_FIT_TOGGLE: only shown for Double Page flick modes -->
+              <button class="megaRow hidden" id="megaRowImageFit" type="button">
+                <span class="megaLeft">Image Fit</span>
+                <span class="megaRight">
+                  <span id="megaImageFitValue" class="megaValue">Fit Height</span>
+                  <span class="megaChevron">Open</span>
+                </span>
+              </button>
+
+<!-- Build 14: one-mode reader (infinite strip only). Scroll mode setting removed. -->
+
+              <button class="megaRow" id="megaRowWidth" type="button">
+                <span class="megaLeft">Portrait width</span>
+                <span class="megaRight">
+                  <span id="megaWidthValue" class="megaValue">None</span>
+                  <span class="megaChevron">Open</span>
+                </span>
+              </button>
+
+              <!-- Build 14: spreads are inline; no spread fit/fill setting. -->
+
+              <button class="megaRow" id="megaRowTools" type="button">
+                <span class="megaLeft">Tools</span>
+                <span class="megaRight">
+                  <span class="megaValue">Keys</span>
+                  <span class="megaChevron">Open</span>
+                </span>
+              </button>
+
+              <button class="megaRow" id="megaRowProgress" type="button">
+                <span class="megaLeft">Progress</span>
+                <span class="megaRight">
+                  <span id="megaProgressValue" class="megaValue">None</span>
+                  <span class="megaChevron">Open</span>
+                </span>
+              </button>
+
+              <div class="megaFoot muted tiny">All settings now live here (Build 6B).</div>
+            </div>
+
+            <!-- Submenu -->
+            <div id="megaSubPanel" class="megaPanel megaSubPanel hidden">
+              <div class="megaSubTop">
+                <button id="megaBackBtn" class="iconBtn ytIcon megaBackBtn" type="button" title="Back">Back</button>
+                <div id="megaSubTitle" class="megaSubTitle">None</div>
+              </div>
+              <div id="megaSubList" class="megaSubList"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Volume navigator overlay -->
+        <div id="volNavOverlay" class="volNavOverlay hidden" role="dialog" aria-modal="true">
+          <div class="volNavCard">
+            <div class="volNavTop">
+              <div id="volNavTitle" class="volNavTitle">Volumes</div>
+              <button id="volNavClose" class="btn btn-ghost btn-sm">Close</button>
+            </div>
+            <input id="volNavSearch" class="search volNavSearch" placeholder="Search volumes (try: vol 12)" autocomplete="off" />
+            <div id="volNavList" class="volNavList" role="listbox" aria-label="Volumes"></div>
+            <div class="volNavHint muted tiny">Enter: open · Esc: close</div>
+          </div>
+        </div>
+</div>
+
+      </section>

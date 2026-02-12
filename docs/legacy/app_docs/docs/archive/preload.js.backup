@@ -1,0 +1,458 @@
+/* 
+AI_NAV: preload.js
+OWNERSHIP: Preload bridge. Owns the safe API exposed to the renderer (window.electronAPI) and IPC invoke channel wrappers.
+
+HOW TO NAVIGATE
+- Search: AI_ANCHOR:
+- Search: AI_STATE_READ / AI_STATE_WRITE / AI_IPC / AI_EXIT_PATH / AI_PERF_HOT / AI_MPV_WIRING / AI_UI_RENDER
+- This file is "prepped" for future assistants: comments are navigation only; behavior must remain identical unless explicitly changed.
+
+COMMON ANCHORS
+- AI_ANCHOR: 
+// AI_IPC: Renderer-facing API is defined here. If a renderer feature needs a new capability, add it here + implement in main.js.
+contextBridge.exposeInMainWorld (public API surface)
+- AI_ANCHOR: ipcRenderer.invoke wrappers (channel names)
+- AI_ANCHOR: security boundary notes (what should not be exposed)
+*/
+
+/*
+OWNERSHIP (preload):
+- Defines the single, supported renderer API surface via contextBridge
+- All renderer ↔ main IPC channels should be declared here (one stop)
+- Avoid adding Node access in renderer; extend preload API instead
+*/
+
+const { contextBridge, ipcRenderer } = require('electron');
+
+// Phase 2: IPC contract (Build 76)
+const { CHANNEL, EVENT } = require('./shared/ipc');
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  // window
+  isFullscreen: () => ipcRenderer.invoke(CHANNEL.WINDOW_IS_FULLSCREEN),
+  toggleFullscreen: () => ipcRenderer.invoke(CHANNEL.WINDOW_TOGGLE_FULLSCREEN),
+  setFullscreen: (v) => ipcRenderer.invoke(CHANNEL.WINDOW_SET_FULLSCREEN, v),
+  isAlwaysOnTop: () => ipcRenderer.invoke(CHANNEL.WINDOW_IS_ALWAYS_ON_TOP),
+  toggleAlwaysOnTop: () => ipcRenderer.invoke(CHANNEL.WINDOW_TOGGLE_ALWAYS_ON_TOP),
+  takeScreenshot: () => ipcRenderer.invoke(CHANNEL.WINDOW_TAKE_SCREENSHOT),
+  openSubtitleDialog: () => ipcRenderer.invoke(CHANNEL.WINDOW_OPEN_SUBTITLE_DIALOG),
+  minimize: () => ipcRenderer.invoke(CHANNEL.WINDOW_MINIMIZE),
+  close: () => ipcRenderer.invoke(CHANNEL.WINDOW_CLOSE),
+    openBookInNewWindow: (bookId) => ipcRenderer.invoke(CHANNEL.WINDOW_OPEN_BOOK_IN_NEW_WINDOW, bookId),
+
+  openVideoShell: (payload) => ipcRenderer.invoke(CHANNEL.WINDOW_OPEN_VIDEO_SHELL, payload),
+
+  // library
+  getLibraryState: () => ipcRenderer.invoke(CHANNEL.LIBRARY_GET_STATE),
+  onLibraryUpdated: (cb) => {
+    if (typeof cb !== 'function') return;
+    ipcRenderer.on(EVENT.LIBRARY_UPDATED, (_evt, state) => cb(state));
+  },
+
+  onLibraryScanStatus: (cb) => {
+    if (typeof cb !== 'function') return;
+    ipcRenderer.on(EVENT.LIBRARY_SCAN_STATUS, (_evt, s) => cb(s));
+  },
+
+  // BUILD27_SCAN_UI
+  scanLibrary: (opts) => ipcRenderer.invoke(CHANNEL.LIBRARY_SCAN, opts),
+  cancelLibraryScan: () => ipcRenderer.invoke(CHANNEL.LIBRARY_CANCEL_SCAN),
+  setLibraryScanIgnore: (patterns) => ipcRenderer.invoke(CHANNEL.LIBRARY_SET_SCAN_IGNORE, patterns),
+
+  addRootFolder: () => ipcRenderer.invoke(CHANNEL.LIBRARY_ADD_ROOT_FOLDER),
+  addSeriesFolder: () => ipcRenderer.invoke(CHANNEL.LIBRARY_ADD_SERIES_FOLDER),
+  removeSeriesFolder: (folder) => ipcRenderer.invoke(CHANNEL.LIBRARY_REMOVE_SERIES_FOLDER, folder),
+  removeRootFolder: (rootPath) => ipcRenderer.invoke(CHANNEL.LIBRARY_REMOVE_ROOT_FOLDER, rootPath),
+  unignoreSeries: (folder) => ipcRenderer.invoke(CHANNEL.LIBRARY_UNIGNORE_SERIES, folder),
+  clearIgnoredSeries: () => ipcRenderer.invoke(CHANNEL.LIBRARY_CLEAR_IGNORED_SERIES),
+  openComicFileDialog: () => ipcRenderer.invoke(CHANNEL.COMIC_OPEN_FILE_DIALOG),
+
+  // BUILD26_OPENWITH_DND (Build 26)
+  bookFromPath: (filePath) => ipcRenderer.invoke(CHANNEL.COMIC_BOOK_FROM_PATH, filePath),
+
+  onAppOpenFiles: (cb) => {
+    if (typeof cb !== 'function') return () => {};
+    const handler = (_evt, payload) => cb(payload);
+    ipcRenderer.on(EVENT.APP_OPEN_FILES, handler);
+    return () => ipcRenderer.removeListener(EVENT.APP_OPEN_FILES, handler);
+  },
+  // shell
+  revealPath: (path) => ipcRenderer.invoke(CHANNEL.SHELL_REVEAL_PATH, path),
+
+
+
+
+
+  // video
+  getVideoState: () => ipcRenderer.invoke(CHANNEL.VIDEO_GET_STATE),
+  onVideoUpdated: (cb) => {
+    if (typeof cb !== 'function') return;
+    ipcRenderer.on(EVENT.VIDEO_UPDATED, (_evt, state) => cb(state));
+  },
+onVideoShellPlay: (cb) => {
+  if (typeof cb !== 'function') return;
+  ipcRenderer.on(EVENT.VIDEO_SHELL_PLAY, (_evt, payload) => cb(payload));
+},
+
+  onVideoScanStatus: (cb) => {
+    if (typeof cb !== 'function') return;
+    ipcRenderer.on(EVENT.VIDEO_SCAN_STATUS, (_evt, s) => cb(s));
+  },
+  scanVideoLibrary: (opts) => ipcRenderer.invoke(CHANNEL.VIDEO_SCAN, opts),
+  cancelVideoScan: () => ipcRenderer.invoke(CHANNEL.VIDEO_CANCEL_SCAN),
+  addVideoFolder: () => ipcRenderer.invoke(CHANNEL.VIDEO_ADD_FOLDER),
+  removeVideoFolder: (folderPath) => ipcRenderer.invoke(CHANNEL.VIDEO_REMOVE_FOLDER, folderPath),
+  hideVideoShow: (showId) => ipcRenderer.invoke(CHANNEL.VIDEO_HIDE_SHOW, showId),
+  openVideoFileDialog: () => ipcRenderer.invoke(CHANNEL.VIDEO_OPEN_FILE_DIALOG),
+
+  openSubtitleFileDialog: () => ipcRenderer.invoke(CHANNEL.VIDEO_OPEN_SUBTITLE_FILE_DIALOG),
+  // BUILD71: On-demand episode loading
+  getEpisodesForShow: (showId) => ipcRenderer.invoke(CHANNEL.VIDEO_GET_EPISODES_FOR_SHOW, showId),
+  getEpisodesForRoot: (rootId) => ipcRenderer.invoke(CHANNEL.VIDEO_GET_EPISODES_FOR_ROOT, rootId),
+  // video progress
+  getAllVideoProgress: () => ipcRenderer.invoke(CHANNEL.VIDEO_PROGRESS_GET_ALL),
+  getVideoProgress: (videoId) => ipcRenderer.invoke(CHANNEL.VIDEO_PROGRESS_GET, videoId),
+  saveVideoProgress: (videoId, progress) => ipcRenderer.invoke(CHANNEL.VIDEO_PROGRESS_SAVE, videoId, progress),
+  clearVideoProgress: (videoId) => ipcRenderer.invoke(CHANNEL.VIDEO_PROGRESS_CLEAR, videoId),
+  clearAllVideoProgress: () => ipcRenderer.invoke(CHANNEL.VIDEO_PROGRESS_CLEAR_ALL),
+
+  // video settings (Tankoban Plus Build 3)
+  getVideoSettings: () => ipcRenderer.invoke(CHANNEL.VIDEO_SETTINGS_GET),
+  saveVideoSettings: (settings) => ipcRenderer.invoke(CHANNEL.VIDEO_SETTINGS_SAVE, settings),
+  clearVideoSettings: () => ipcRenderer.invoke(CHANNEL.VIDEO_SETTINGS_CLEAR),
+
+  getVideoUiState: () => ipcRenderer.invoke(CHANNEL.VIDEO_UI_GET),
+  saveVideoUiState: (ui) => ipcRenderer.invoke(CHANNEL.VIDEO_UI_SAVE, ui),
+  clearVideoUiState: () => ipcRenderer.invoke(CHANNEL.VIDEO_UI_CLEAR),
+
+  // video posters (per-show custom poster)
+  getVideoPoster: (showId) => ipcRenderer.invoke(CHANNEL.VIDEO_POSTER_GET, showId),
+  hasVideoPoster: (showId) => ipcRenderer.invoke(CHANNEL.VIDEO_POSTER_HAS, showId),
+  saveVideoPoster: (showId, dataUrl) => ipcRenderer.invoke(CHANNEL.VIDEO_POSTER_SAVE, showId, dataUrl),
+  deleteVideoPoster: (showId) => ipcRenderer.invoke(CHANNEL.VIDEO_POSTER_DELETE, showId),
+  pasteVideoPoster: (showId) => ipcRenderer.invoke(CHANNEL.VIDEO_POSTER_PASTE, showId),
+
+  copyText: (text) => ipcRenderer.invoke(CHANNEL.CLIPBOARD_WRITE_TEXT, text),
+
+// mpv bridge (Tankoban Plus Build 4.1)
+mpv: {
+  isAvailable: async (opts) => {
+    const detailed = !!(opts && typeof opts === 'object' && opts.detailed);
+    try {
+      const res = await ipcRenderer.invoke(CHANNEL.MPV_IS_AVAILABLE);
+      if (detailed) {
+        return (res && typeof res === 'object')
+          ? res
+          : { ok: true, available: false, error: 'Invalid response', path: null, source: null };
+      }
+      return !!(res && res.ok && res.available);
+    } catch (e) {
+      if (detailed) {
+        return { ok: true, available: false, error: String(e && e.message ? e.message : e), path: null, source: null };
+      }
+      return false;
+    }
+  },
+  create: async () => {
+    try {
+      const res = await ipcRenderer.invoke(CHANNEL.MPV_CREATE);
+      return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+    } catch (e) {
+      return { ok: false, error: String(e && e.message ? e.message : e) };
+    }
+  },
+  destroy: async (playerId) => {
+    try {
+      const res = await ipcRenderer.invoke(CHANNEL.MPV_DESTROY, String(playerId || ''));
+      return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+    } catch (e) {
+      return { ok: false, error: String(e && e.message ? e.message : e) };
+    }
+  },
+  load: async (playerId, filePath) => {
+    try {
+      const res = await ipcRenderer.invoke(CHANNEL.MPV_LOAD, String(playerId || ''), String(filePath || ''));
+      return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+    } catch (e) {
+      return { ok: false, error: String(e && e.message ? e.message : e) };
+    }
+  },
+  command: async (playerId, argsArray) => {
+    try {
+      const args = Array.isArray(argsArray) ? argsArray : [];
+      const res = await ipcRenderer.invoke(CHANNEL.MPV_COMMAND, String(playerId || ''), args);
+      return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+    } catch (e) {
+      return { ok: false, error: String(e && e.message ? e.message : e) };
+    }
+  },
+  setProperty: async (playerId, name, value) => {
+    try {
+      const res = await ipcRenderer.invoke(CHANNEL.MPV_SET_PROPERTY, String(playerId || ''), String(name || ''), value);
+      return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+    } catch (e) {
+      return { ok: false, error: String(e && e.message ? e.message : e) };
+    }
+  },
+  observeProperty: async (playerId, name) => {
+    try {
+      const res = await ipcRenderer.invoke(CHANNEL.MPV_OBSERVE_PROPERTY, String(playerId || ''), String(name || ''));
+      return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+    } catch (e) {
+      return { ok: false, error: String(e && e.message ? e.message : e) };
+    }
+  },
+  setBounds: async (playerId, bounds) => {
+    try {
+      const res = await ipcRenderer.invoke(CHANNEL.MPV_SET_BOUNDS, String(playerId || ''), bounds || null);
+      return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+    } catch (e) {
+      return { ok: false, error: String(e && e.message ? e.message : e) };
+    }
+  },
+  setVisible: async (playerId, visible) => {
+    try {
+      const res = await ipcRenderer.invoke(CHANNEL.MPV_SET_VISIBLE, String(playerId || ''), !!visible);
+      return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+    } catch (e) {
+      return { ok: false, error: String(e && e.message ? e.message : e) };
+    }
+  },
+  onEvent: (playerId, handler) => {
+    if (typeof handler !== 'function') return () => {};
+    const channel = EVENT.mpvEvent(String(playerId || ''));
+    const fn = (_evt, payload) => {
+      try { handler(payload); } catch {}
+    };
+    ipcRenderer.on(channel, fn);
+    return () => {
+      try { ipcRenderer.removeListener(channel, fn); } catch {}
+    };
+  },
+},
+
+  // libmpv native bridge (Build 26 - groundwork)
+  libmpv: {
+    probe: async () => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_PROBE);
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    create: async () => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_CREATE);
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    createRenderless: async () => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_CREATE_RENDERLESS);
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+
+    destroy: async (handleId) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_DESTROY, String(handleId || ''));
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    command: async (handleId, args) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_COMMAND, String(handleId || ''), Array.isArray(args) ? args : []);
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    setPropertyString: async (handleId, name, value) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_SET_PROPERTY_STRING, String(handleId || ''), String(name || ''), String(value ?? ''));
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    getPropertyString: async (handleId, name) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_GET_PROPERTY_STRING, String(handleId || ''), String(name || ''));
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    // BUILD31_RENDER: Render context lifecycle + update event bridge (no pixels yet).
+    renderCreateContext: async (handleId) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_RENDER_CREATE_CONTEXT, String(handleId || ''));
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    renderFreeContext: async (handleId) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_RENDER_FREE_CONTEXT, String(handleId || ''));
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    renderFrameRGBA: async (handleId, width, height) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_RENDER_FRAME_RGBA, String(handleId || ''), Number(width || 0), Number(height || 0));
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    // Step 5: Attach a renderer-owned SharedArrayBuffer so main can render directly into it.
+    renderAttachSharedBuffer: async (handleId, sharedBuffer, width, height) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_RENDER_ATTACH_SHARED_BUFFER, String(handleId || ''), sharedBuffer, Number(width || 0), Number(height || 0));
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    renderDetachSharedBuffer: async (handleId) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_RENDER_DETACH_SHARED_BUFFER, String(handleId || ''));
+        return (res && typeof res === 'object') ? res : { ok: true };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    renderToSharedBuffer: async (handleId) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_RENDER_TO_SHARED_BUFFER, String(handleId || ''));
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+
+    renderEnableUpdateEvents: async (handleId) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_RENDER_ENABLE_UPDATE_EVENTS, String(handleId || ''));
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    renderDisableUpdateEvents: async (handleId) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_RENDER_DISABLE_UPDATE_EVENTS, String(handleId || ''));
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    onRenderUpdate: (handleId, handler) => {
+      if (typeof handler !== 'function') return () => {};
+      const hid = String(handleId || '');
+      const channel = EVENT.libmpvRenderUpdate(hid);
+      const fn = (_evt, payload) => {
+        try { handler(payload); } catch {}
+      };
+      ipcRenderer.on(channel, fn);
+      return () => {
+        try { ipcRenderer.removeListener(channel, fn); } catch {}
+      };
+    },
+
+    // BUILD31: Create an embedded child surface and render libmpv into it.
+    createEmbedded: async (bounds) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_CREATE_EMBEDDED, bounds || {});
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    // BUILD31: Update embedded surface bounds.
+    setBounds: async (handleId, bounds) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_SET_BOUNDS, String(handleId || ''), bounds || {});
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+    // BUILD31: Show/hide embedded surface (does not destroy it).
+    setVisible: async (handleId, visible) => {
+      try {
+        const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_SET_VISIBLE, String(handleId || ''), !!visible);
+        return (res && typeof res === 'object') ? res : { ok: false, error: 'Invalid response' };
+      } catch (e) {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+      }
+    },
+
+  },
+
+  // thumbs
+  hasThumb: (bookId) => ipcRenderer.invoke(CHANNEL.THUMBS_HAS, bookId),
+  getThumb: (bookId) => ipcRenderer.invoke(CHANNEL.THUMBS_GET, bookId),
+  saveThumb: (bookId, dataUrl) => ipcRenderer.invoke(CHANNEL.THUMBS_SAVE, bookId, dataUrl),
+  deleteThumb: (bookId) => ipcRenderer.invoke(CHANNEL.THUMBS_DELETE, bookId),
+
+  // page thumbs (Flow)
+  hasPageThumb: (bookId, pageIndex) => ipcRenderer.invoke(CHANNEL.PAGE_THUMBS_HAS, bookId, pageIndex),
+  getPageThumb: (bookId, pageIndex) => ipcRenderer.invoke(CHANNEL.PAGE_THUMBS_GET, bookId, pageIndex),
+  savePageThumb: (bookId, pageIndex, dataUrl) => ipcRenderer.invoke(CHANNEL.PAGE_THUMBS_SAVE, bookId, pageIndex, dataUrl),
+
+  // file
+  readFile: (path) => ipcRenderer.invoke(CHANNEL.FILE_READ, path),
+
+  // BUILD 19D_CBZ_API (Build 19D)
+  // INTENT: Renderer uses lazy CBZ sessions instead of reading full files into memory.
+  cbzOpen: (filePath) => ipcRenderer.invoke(CHANNEL.CBZ_OPEN, filePath),
+  cbzReadEntry: (sessionId, entryIndex) => ipcRenderer.invoke(CHANNEL.CBZ_READ_ENTRY, sessionId, entryIndex),
+  cbzClose: (sessionId) => ipcRenderer.invoke(CHANNEL.CBZ_CLOSE, sessionId),
+
+  // BUILD 19E_CBR_API (Build 19E)
+  cbrOpen: (filePath) => ipcRenderer.invoke(CHANNEL.CBR_OPEN, filePath),
+  cbrReadEntry: (sessionId, entryIndex) => ipcRenderer.invoke(CHANNEL.CBR_READ_ENTRY, sessionId, entryIndex),
+    exportSaveEntry: (payload) => ipcRenderer.invoke(CHANNEL.EXPORT_SAVE_ENTRY, payload),
+    exportCopyEntry: (payload) => ipcRenderer.invoke(CHANNEL.EXPORT_COPY_ENTRY, payload),
+  cbrClose: (sessionId) => ipcRenderer.invoke(CHANNEL.CBR_CLOSE, sessionId),
+
+  // progress
+  getAllProgress: () => ipcRenderer.invoke(CHANNEL.PROGRESS_GET_ALL),
+  getProgress: (bookId) => ipcRenderer.invoke(CHANNEL.PROGRESS_GET, bookId),
+  saveProgress: (bookId, progress) => ipcRenderer.invoke(CHANNEL.PROGRESS_SAVE, bookId, progress),
+  clearProgress: (bookId) => ipcRenderer.invoke(CHANNEL.PROGRESS_CLEAR, bookId),
+  clearAllProgress: () => ipcRenderer.invoke(CHANNEL.PROGRESS_CLEAR_ALL),
+
+  // series settings
+  getSeriesSettings: (seriesId) => ipcRenderer.invoke(CHANNEL.SERIES_SETTINGS_GET, seriesId),
+  saveSeriesSettings: (seriesId, settings) => ipcRenderer.invoke(CHANNEL.SERIES_SETTINGS_SAVE, seriesId, settings),
+  clearSeriesSettings: (seriesId) => ipcRenderer.invoke(CHANNEL.SERIES_SETTINGS_CLEAR, seriesId),
+});

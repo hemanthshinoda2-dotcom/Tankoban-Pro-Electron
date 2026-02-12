@@ -1,0 +1,109 @@
+{
+  "name": "manga-scroller",
+  "version": "0.1.31",
+  "private": true,
+  "description": "Tankoban Plus \u2014 Build 87 (Video Performance + Context Menu + Chapters)",
+  "main": "main.js",
+  "scripts": {
+    "prestart": "..\\scripts\\windows\\ensure_mpv_windows.bat",
+    "start": "electron .",
+    "predist": "..\\scripts\\windows\\ensure_mpv_windows.bat",
+    "dist": "npm run build:player && electron-builder",
+    "prepack": "..\\scripts\\windows\\ensure_mpv_windows.bat",
+    "pack": "npm run build:player && electron-builder --dir",
+    "pack:folder": "electron-packager . \"Tankoban\" --platform=win32 --arch=x64 --out=dist --overwrite --asar --asar.unpackDir=\"resources/mpv\" --icon=build/icon.ico",
+    "zip:folder": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"if(Test-Path dist\\\\Tankoban-win32-x64.zip){Remove-Item dist\\\\Tankoban-win32-x64.zip -Force}; Compress-Archive -Path 'dist\\\\Tankoban-win32-x64\\\\*' -DestinationPath 'dist\\\\Tankoban-win32-x64.zip'\"",
+    "doctor": "node tools/doctor.js",
+    "map": "node tools/repo_map.js",
+    "smoke": "node tools/smoke_check.js",
+    "build:player": "cd player_qt && build_player.bat"
+  },
+  "devDependencies": {
+    "electron": "30.0.0",
+    "electron-builder": "24.13.3",
+    "electron-packager": "17.1.2"
+  },
+  "build": {
+    "appId": "com.hemanth.mangascroller",
+    "productName": "Tankoban Plus",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "library_scan_worker.js",
+      "video_scan_worker.js",
+      "preload.js",
+      "main/**/*",
+      "preload/**/*",
+      "shared/**/*",
+      "resources/**/*",
+      "build/**/*",
+      "src/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/node-unrar-js/**",
+      "node_modules/ffmpeg-static/**",
+      "node_modules/ffprobe-static/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "fileAssociations": [
+      {
+        "ext": "cbz",
+        "name": "CBZ",
+        "description": "Comic Book ZIP Archive",
+        "role": "Viewer"
+      },
+      {
+        "ext": "cbr",
+        "name": "CBR",
+        "description": "Comic Book RAR Archive",
+        "role": "Viewer"
+      }
+    ],
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-${arch}-Portable.${ext}"
+    },
+    "extraResources": [
+      {
+        "from": "resources/mpv/windows",
+        "to": "mpv/windows"
+      },
+      {
+        "from": "player_qt/dist/TankobanPlayer",
+        "to": "player/TankobanPlayer"
+      }
+    ]
+  },
+  "dependencies": {
+    "node-unrar-js": "^2.0.2",
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0"
+  },
+  "productName": "Tankoban Plus"
+}

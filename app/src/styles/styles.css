@@ -1,0 +1,3437 @@
+/*
+OWNERSHIP (styles):
+- Global UI styling for the app
+- Video HUD / fullscreen / toast / mpv-mode layout rules live here
+- Keep selectors stable; many behaviors depend on specific class hooks on <body>
+*/
+
+
+/* BUILD34: avoid scrollbars in the video shell (fullscreen/windowed). */
+body.inVideoPlayer {
+  overflow: hidden;
+}
+
+/* BUILD37: video shell should be edge-to-edge and never introduce scrollbars (fullscreen/windowed). */
+body.videoShellMode {
+  overflow: hidden;
+}
+body.videoShellMode .topbar {
+  display: none !important;
+}
+body.videoShellMode main {
+  padding: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  height: 100vh;
+}
+body.videoShellMode #videoPlayerView {
+  position: fixed;
+  inset: 0;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: block !important;
+  width: 100vw;
+  height: 100vh;
+}
+body.videoShellMode .videoPlayerShell {
+  width: 100vw !important;
+  height: 100vh !important;
+  overflow: hidden;
+}
+body.videoShellMode .videoStage {
+  height: 100% !important;
+}
+
+/* Build 54: in-player diagnostics overlay (canvas rendering stats) */
+.videoDiagnostics{
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 60;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.92);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: pre;
+  pointer-events: none;
+  max-width: 520px;
+}
+
+
+/* BUILD40A: true fullscreen inside the embedded player.
+   Requirements:
+   - Video fills the entire window in fullscreen (aspect-ratio bars only when needed).
+   - No Tankoban chrome or player control bar in fullscreen.
+   - Only two sizes: normal (with control bar) and fullscreen (video only).
+*/
+body.videoFullscreen {
+  overflow: hidden;
+}
+body.videoFullscreen .topbar {
+  display: none !important;
+}
+body.videoFullscreen main {
+  padding: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  height: 100vh;
+}
+body.videoFullscreen #videoPlayerView {
+  position: fixed;
+  inset: 0;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: block !important;
+  width: 100%;
+  height: 100%;
+}
+body.videoFullscreen .videoPlayerShell {
+  width: 100% !important;
+  height: 100% !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  overflow: hidden;
+}
+body.videoFullscreen .videoPlayerBar {
+  display: none !important;
+}
+body.videoFullscreen .videoStage {
+  height: 100% !important;
+  gap: 0 !important;
+}
+body.videoFullscreen .mpvHost {
+  border-radius: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+:root{
+  /* Build 41A — Black/charcoal theme */
+  --bg:#070707;
+  --bg-rgb: 7,7,7;
+
+  --panel:#0f1012;
+  --panel-rgb: 15,16,18;
+
+  --panel2:#151618;
+  --panel2-rgb: 21,22,24;
+
+  /* Translucent surfaces (used for sidebar/topbars/HUD) */
+  --surface-rgb: 18,18,18;
+
+  --text:#e6e6e6;
+  --muted:#a1a1aa;
+  --border:rgba(255,255,255,.14);
+  --accent:#60a5fa;
+  --accent-rgb: 96,165,250;
+
+  /* YAC-style library tokens (Build 1) */
+  --lib-font: 11px;
+  --lib-line: 1.25;
+  --lib-topbar-h: 38px;
+  --lib-side-w: 210px;
+  --lib-gap: 10px;
+  --lib-pad: 8px;
+  --lib-radius: 8px;
+  --lib-radius-sm: 6px;
+  --lib-border: rgba(255,255,255,.10);
+  --lib-hover: rgba(255,255,255,.06);
+  --lib-select: rgba(var(--accent-rgb),.14);
+
+  /* BUILD19F_TOPBAR_TOKENS (Build 19F)
+     INTENT: Library top settings bar becomes a neutral light-grey control strip.
+     Scope: These tokens are ONLY consumed by .topbar overrides below. */
+  --topbar-bg: #e9eaed;
+  --topbar-bg2: #f3f4f6;
+  --topbar-text: rgba(20,20,20,.92);
+  --topbar-muted: rgba(20,20,20,.62);
+  --topbar-border: rgba(0,0,0,.10);
+  --topbar-border2: rgba(0,0,0,.14);
+  --topbar-shadow: rgba(0,0,0,.16);
+}
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  font-family: ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+  background:var(--bg);
+  color:var(--text);
+}
+
+/* Build 36: standard OS window chrome is enabled; hide redundant in-app window buttons. */
+.winChromeHidden{ display:none !important; }
+
+/* -----------------------------
+   EDIT_ZONE:LIB_TOKENS
+   Build 1 — Library shell + density foundation
+   (Scoped to library view; player UI unaffected.)
+------------------------------*/
+
+/* Truncation utilities */
+.u-ellipsis{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.u-clamp2{
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  overflow:hidden;
+  line-height: var(--lib-line);
+  max-height: calc(2 * 1em * var(--lib-line));
+  min-height: calc(2 * 1em * var(--lib-line));
+}
+
+/* BUILD 24 — OLED Cinema Library skin (Theme C) */
+/* INTENT: Scope theme tokens to the Library UI only (body:not(.inPlayer)) so the Player/Reader colors remain unchanged. */
+body:not(.inPlayer){
+  --bg: #121212;
+  --bg-rgb: 18,18,18;
+  --text: #eeeeee;
+  --accent: #ff5555;
+  --accent-rgb: 255,85,85;
+  --surface-rgb: 0,0,0;
+
+  /* Library selection/active highlight */
+  --lib-select: rgba(var(--accent-rgb),.14);
+
+  /* Topbar tokens: Build 23A defaulted to a light strip; Theme C keeps it dark. */
+  --topbar-bg: #000000;
+  --topbar-bg2: #121212;
+  --topbar-text: #eeeeee;
+  --topbar-muted: rgba(238,238,238,.70);
+  --topbar-border: rgba(255,255,255,.10);
+  --topbar-border2: rgba(255,255,255,.14);
+  --topbar-shadow: rgba(0,0,0,.65);
+}
+
+/* Required: Library sidebar is true OLED black. */
+body:not(.inPlayer) .libSidebar {
+  background: #000000;
+}
+
+/* Library topbar controls: dark surfaces with light text; accent color is driven by --accent-rgb above. */
+body:not(.inPlayer) .topbar .iconBtn,
+body:not(.inPlayer) .topbar .btn-ghost {
+  background: rgba(255,255,255,.06);
+  border-color: var(--topbar-border2);
+  color: var(--topbar-text);
+}
+body:not(.inPlayer) .topbar .iconBtn:hover,
+body:not(.inPlayer) .topbar .btn-ghost:hover {
+  background: rgba(255,255,255,.10);
+  border-color: rgba(255,255,255,.18);
+}
+
+body:not(.inPlayer) #libraryView,
+body:not(.inPlayer) #videoLibraryView{
+  font-size: var(--lib-font);
+  line-height: var(--lib-line);
+}
+
+body:not(.inPlayer) main{
+  padding: var(--lib-topbar-h) 0 0;
+  max-width:none;
+  margin:0;
+}
+
+body:not(.inPlayer) .view{ gap:0; }
+
+.libraryShell{
+  display:grid;
+  grid-template-columns: var(--lib-side-w) 1fr;
+  min-height: calc(100vh - var(--lib-topbar-h));
+  height: calc(100vh - var(--lib-topbar-h));
+}
+
+.libSidebar{
+  border-right:1px solid var(--lib-border);
+  background: rgba(var(--surface-rgb),.40);
+  padding: var(--lib-pad);
+  overflow:auto;
+}
+
+.navSection{ display:flex; flex-direction:column; gap:6px; }
+.navHeader{ font-weight:800; font-size: 11px; letter-spacing:.2px; color: rgba(229,231,235,.92); }
+.navItems{ display:flex; flex-direction:column; gap:6px; }
+.navSep{ height:1px; background: var(--lib-border); margin: 10px 0; }
+.navMuted{ color: var(--muted); font-size: 11px; padding: 2px 2px; }
+
+.libContent{
+  padding: var(--lib-pad);
+  display:flex;
+  flex-direction:column;
+  gap: var(--lib-gap);
+  flex: 1;
+  min-height: 0;
+  overflow:hidden;
+}
+
+/* Build 4.5 — true view switch inside the Library content area */
+.homeView{
+  flex: 1;
+  min-height: 0;
+  display:flex;
+  flex-direction:column;
+  gap: var(--lib-gap);
+  overflow:auto;
+}
+
+/* Build 9: library scrollbar styling */
+body:not(.inPlayer) #libraryView .libSidebar,
+body:not(.inPlayer) #libraryView .homeView,
+body:not(.inPlayer) #libraryView .continueYacRow,
+body:not(.inPlayer) #libraryView .searchResults,
+body:not(.inPlayer) #libraryView .volTableBody,
+body:not(.inPlayer) #videoLibraryView .libSidebar,
+body:not(.inPlayer) #videoLibraryView .homeView,
+body:not(.inPlayer) #videoLibraryView .videoContinueRow{
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.30) transparent;
+}
+
+body:not(.inPlayer) #libraryView .libSidebar::-webkit-scrollbar,
+body:not(.inPlayer) #libraryView .homeView::-webkit-scrollbar,
+body:not(.inPlayer) #libraryView .continueYacRow::-webkit-scrollbar,
+body:not(.inPlayer) #libraryView .searchResults::-webkit-scrollbar,
+body:not(.inPlayer) #libraryView .volTableBody::-webkit-scrollbar,
+body:not(.inPlayer) #videoLibraryView .libSidebar::-webkit-scrollbar,
+body:not(.inPlayer) #videoLibraryView .homeView::-webkit-scrollbar,
+body:not(.inPlayer) #videoLibraryView .videoContinueRow::-webkit-scrollbar{
+  width: 8px;
+  height: 8px;
+}
+
+body:not(.inPlayer) #libraryView .libSidebar::-webkit-scrollbar-track,
+body:not(.inPlayer) #libraryView .homeView::-webkit-scrollbar-track,
+body:not(.inPlayer) #libraryView .continueYacRow::-webkit-scrollbar-track,
+body:not(.inPlayer) #libraryView .searchResults::-webkit-scrollbar-track,
+body:not(.inPlayer) #libraryView .volTableBody::-webkit-scrollbar-track,
+body:not(.inPlayer) #videoLibraryView .libSidebar::-webkit-scrollbar-track,
+body:not(.inPlayer) #videoLibraryView .homeView::-webkit-scrollbar-track,
+body:not(.inPlayer) #videoLibraryView .videoContinueRow::-webkit-scrollbar-track{
+  background: transparent;
+}
+
+body:not(.inPlayer) #libraryView .libSidebar::-webkit-scrollbar-thumb,
+body:not(.inPlayer) #libraryView .homeView::-webkit-scrollbar-thumb,
+body:not(.inPlayer) #libraryView .continueYacRow::-webkit-scrollbar-thumb,
+body:not(.inPlayer) #libraryView .searchResults::-webkit-scrollbar-thumb,
+body:not(.inPlayer) #libraryView .volTableBody::-webkit-scrollbar-thumb,
+body:not(.inPlayer) #videoLibraryView .libSidebar::-webkit-scrollbar-thumb,
+body:not(.inPlayer) #videoLibraryView .homeView::-webkit-scrollbar-thumb,
+body:not(.inPlayer) #videoLibraryView .videoContinueRow::-webkit-scrollbar-thumb{
+  background-color: rgba(255,255,255,.18);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+body:not(.inPlayer) #libraryView .libSidebar::-webkit-scrollbar-thumb:hover,
+body:not(.inPlayer) #libraryView .homeView::-webkit-scrollbar-thumb:hover,
+body:not(.inPlayer) #libraryView .continueYacRow::-webkit-scrollbar-thumb:hover,
+body:not(.inPlayer) #libraryView .searchResults::-webkit-scrollbar-thumb:hover,
+body:not(.inPlayer) #libraryView .volTableBody::-webkit-scrollbar-thumb:hover,
+body:not(.inPlayer) #videoLibraryView .libSidebar::-webkit-scrollbar-thumb:hover,
+body:not(.inPlayer) #videoLibraryView .homeView::-webkit-scrollbar-thumb:hover,
+body:not(.inPlayer) #videoLibraryView .videoContinueRow::-webkit-scrollbar-thumb:hover{
+  background-color: rgba(255,255,255,.32);
+}
+
+body:not(.inPlayer) #libraryView .libSidebar::-webkit-scrollbar-thumb:active,
+body:not(.inPlayer) #libraryView .homeView::-webkit-scrollbar-thumb:active,
+body:not(.inPlayer) #libraryView .continueYacRow::-webkit-scrollbar-thumb:active,
+body:not(.inPlayer) #libraryView .searchResults::-webkit-scrollbar-thumb:active,
+body:not(.inPlayer) #libraryView .volTableBody::-webkit-scrollbar-thumb:active,
+body:not(.inPlayer) #videoLibraryView .libSidebar::-webkit-scrollbar-thumb:active,
+body:not(.inPlayer) #videoLibraryView .homeView::-webkit-scrollbar-thumb:active,
+body:not(.inPlayer) #videoLibraryView .videoContinueRow::-webkit-scrollbar-thumb:active{
+  background-color: rgba(255,255,255,.44);
+}
+
+body:not(.inPlayer) #libraryView .libSidebar::-webkit-scrollbar-corner,
+body:not(.inPlayer) #libraryView .homeView::-webkit-scrollbar-corner,
+body:not(.inPlayer) #libraryView .continueYacRow::-webkit-scrollbar-corner,
+body:not(.inPlayer) #libraryView .searchResults::-webkit-scrollbar-corner,
+body:not(.inPlayer) #libraryView .volTableBody::-webkit-scrollbar-corner,
+body:not(.inPlayer) #videoLibraryView .libSidebar::-webkit-scrollbar-corner,
+body:not(.inPlayer) #videoLibraryView .homeView::-webkit-scrollbar-corner,
+body:not(.inPlayer) #videoLibraryView .videoContinueRow::-webkit-scrollbar-corner{
+  background: transparent;
+}
+
+.seriesView{
+  flex: 1;
+  min-height: 0;
+  display:flex;
+  flex-direction:column;
+}
+
+.seriesDetailPanel{
+  flex: 1;
+  min-height: 0;
+  display:flex;
+  flex-direction:column;
+}
+
+.topbar{
+  display:grid;
+  grid-template-columns: auto 1fr auto;
+  align-items:center;
+  gap: 10px;
+  height: var(--lib-topbar-h);
+  padding: 4px 8px;
+
+  /* BUILD19F_TOPBAR_SURFACE (Build 19F)
+     INTENT: Topbar reads as a distinct control strip above the dark library canvas.
+     Divider + a soft shadow makes the boundary obvious without changing layout. */
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--topbar-border2);
+  box-shadow: 0 1px 0 rgba(255,255,255,.55) inset, 0 10px 22px -18px var(--topbar-shadow);
+  color: var(--topbar-text);
+
+  position:absolute;
+  top:0; left:0; right:0;
+  z-index: 20;
+
+  /* Stable, “finished app” text rendering on the control strip */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+.tbLeft,.tbRight{ display:flex; align-items:center; gap:6px; }
+.tbCenter{ display:flex; align-items:center; justify-content:center; min-width: 0; }
+.tbTitle{
+  /* BUILD19F_TOPBAR_TYPE_TITLE (Build 19F)
+     INTENT: The title should read like a proper header on a control strip, not a tiny label. */
+  font-weight: 900;
+  letter-spacing: .10px;
+  font-size: 14px;      /* bigger, but still safe within the fixed 38px bar */
+  line-height: 1;       /* keeps height stable to avoid layout drift */
+  color: var(--topbar-text);
+}
+
+.iconBtn{
+  appearance:none;
+  width: 28px;
+  height: 28px;
+  border:1px solid var(--lib-border);
+  background: rgba(var(--surface-rgb),.45);
+  color: rgba(229,231,235,.92);
+  border-radius: var(--lib-radius-sm);
+  cursor:pointer;
+  display:grid;
+  place-items:center;
+  padding:0;
+  font-weight:900;
+  line-height:1;
+}
+.iconBtn:hover{ background: rgba(var(--surface-rgb),.62); }
+.iconBtn:active{ transform: translateY(1px); }
+.iconBtn:disabled{ opacity:.45; cursor:default; }
+
+/* BUILD19F_TOPBAR_CONTROLS (Build 19F)
+   INTENT: Topbar controls must look intentionally designed for a light grey surface.
+   Scope: ONLY inside .topbar so the rest of the Library stays dark-themed. */
+.topbar .iconBtn{
+  border-color: var(--topbar-border2);
+  background: rgba(255,255,255,.65);
+  color: var(--topbar-text);
+}
+.topbar .iconBtn:hover{
+  background: rgba(255,255,255,.82);
+  border-color: rgba(0,0,0,.18);
+}
+.topbar .iconBtn:disabled{
+  opacity: .50; /* still readable on grey */
+}
+
+/* Button label typography on the control strip: larger, balanced, stable */
+.topbar .btn{
+  color: var(--topbar-text);
+  border-color: var(--topbar-border2);
+
+  /* Keep existing sizing/padding rules; just make text feel “desktop-app finished”. */
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+.topbar .btn-ghost{
+  background: rgba(255,255,255,.45);
+}
+.topbar .btn-ghost:hover{
+  background: rgba(255,255,255,.70);
+  border-color: rgba(0,0,0,.18);
+}
+
+
+.viewToggles{ display:flex; align-items:center; gap:4px; }
+
+/* Compact defaults for library controls only */
+body:not(.inPlayer) .btn{
+  padding:6px 8px;
+  border-radius: var(--lib-radius-sm);
+  font-size: 11px;
+}
+body:not(.inPlayer) .btn-sm{ padding:4px 6px; border-radius: var(--lib-radius-sm); font-size: 11px; }
+body:not(.inPlayer) .select,
+body:not(.inPlayer) .search{
+  padding:6px 8px;
+  border-radius: var(--lib-radius-sm);
+  font-size: 11px;
+  min-width: 180px;
+}
+
+.navBtn{
+  appearance:none;
+  border:1px solid var(--lib-border);
+  background: rgba(var(--surface-rgb),.35);
+  color: rgba(229,231,235,.92);
+  border-radius: var(--lib-radius-sm);
+  padding: 6px 8px;
+  cursor:pointer;
+  text-align:left;
+  font-weight:800;
+}
+.navBtn:hover{ background: rgba(var(--surface-rgb),.55); }
+.navBtn:active{ transform: translateY(1px); }
+
+/* Build 12: library sidebar folders tree */
+.folderTree{ display:flex; flex-direction:column; gap:4px; margin-top:6px; }
+.folderTreeEmpty{ color: var(--muted); font-size: 11px; padding: 4px 2px; }
+
+.folderItem{
+  appearance:none;
+  border:1px solid transparent;
+  background: transparent;
+  color: rgba(229,231,235,.90);
+  border-radius: var(--lib-radius-sm);
+  padding: 4px 6px;
+  cursor:pointer;
+  text-align:left;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-width:0;
+}
+.folderItem:hover{ background: rgba(var(--surface-rgb),.35); }
+.folderItem:active{ transform: translateY(1px); }
+.folderItem.active{ background: rgba(var(--accent-rgb),.12); border-color: rgba(var(--accent-rgb),.25); }
+
+.folderIcon{ width: 14px; text-align:center; opacity:.90; flex: 0 0 auto; }
+.folderLabel{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex: 1 1 auto; }
+.folderCount{ color: var(--muted); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.folderChild{ margin-left: 14px; }
+
+/* Global search */
+.globalSearchWrap{
+  position:relative;
+  flex: 1;
+  max-width: 460px;
+}
+.globalSearchWrap.compact{ max-width: 360px; }
+.globalSearch{
+  width: 100%;
+  min-width: 200px;
+}
+.searchResults{
+  position:absolute;
+  left:0; right:0;
+  top: calc(100% + 6px);
+  background: rgba(var(--surface-rgb),.98);
+  border:1px solid var(--lib-border);
+  border-radius: var(--lib-radius);
+  overflow:hidden;
+  box-shadow: 0 16px 40px rgba(0,0,0,.45);
+  max-height: min(60vh, 560px);
+  overflow-y:auto;
+  z-index: 40;
+
+  /* BUILD19F_SEARCH_DROPDOWN_TEXT (Build 19F)
+     INTENT: .searchResults lives inside .topbar in the DOM.
+     Once topbar text turns dark, we MUST force dropdown text back to light for legibility. */
+  color: var(--text);
+}
+.resGroup{ padding: 8px 8px 4px; }
+.resHead{ font-weight:850; font-size:11px; color: var(--muted); letter-spacing:.2px; text-transform:uppercase; }
+.resItem{
+  display:flex;
+  gap:10px;
+  padding: 6px 8px;
+  border-radius: var(--lib-radius-sm);
+  cursor:pointer;
+}
+.resItem:hover{ background: rgba(var(--accent-rgb),.10); }
+.resItem.active{ background: rgba(var(--accent-rgb),.16); border:1px solid rgba(var(--accent-rgb),.35); }
+.resType{
+  width: 18px; height: 18px;
+  display:grid; place-items:center;
+  border-radius: 6px;
+  border:1px solid rgba(255,255,255,.22);
+  background: rgba(var(--surface-rgb),.40);
+  flex: 0 0 auto;
+  font-size: 11px;
+}
+.resMain{ font-weight:900; line-height:1.1; }
+.resSub{ color: var(--muted); font-size: 11px; margin-top: 2px; }
+.resText{ min-width:0; }
+.resMain, .resSub{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.resEmpty{ padding: 12px; color: var(--muted); font-size: 12px; }
+.btn{
+  appearance:none;
+  border:1px solid rgba(var(--accent-rgb),.55);
+  background: rgba(var(--accent-rgb),.16);
+  color:var(--text);
+  padding:10px 12px;
+  border-radius:12px;
+  cursor:pointer;
+  font-weight:750;
+}
+.btn:active{ transform: translateY(1px); }
+.btn-ghost{
+  border:1px solid rgba(255,255,255,.25);
+  background: rgba(var(--surface-rgb),.55);
+  color:var(--text);
+}
+.btn-sm{ padding:6px 10px; border-radius:10px; font-size:12px; }
+main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
+.view{ display:grid; gap:14px; }
+.panel{
+  background: var(--panel);
+  border:1px solid var(--lib-border);
+  border-radius:var(--lib-radius);
+  padding: var(--lib-pad);
+}
+.panelTitle{ font-weight:800; margin-bottom:10px; }
+.panelTitleRow{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+.contTools{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.toggle{ display:flex; align-items:center; gap:8px; user-select:none; }
+.toggle input{ width:16px; height:16px; }
+.crumb{ display:flex; align-items:center; gap:10px; }
+.muted{ color:var(--muted); }
+.tiny{ font-size:12px; }
+.mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+
+.hidden{ display:none !important; }
+
+/* Continue Reading (Build 2) */
+.continuePanel{
+  height: 430px;
+  margin-top: 20px;
+  padding: 0;
+  display:flex;
+  flex-direction:column;
+}
+.continueHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-left: 25px;
+  margin-top: 15px;
+  margin-right: 20px;
+}
+.continueTitle{
+  font-size: 18px;
+  font-weight: 600; /* DemiBold */
+  letter-spacing: .1px;
+}
+
+.continueYacRow{
+  flex:1;
+  min-height:0;
+  display:flex;
+  gap: 20px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  padding: 20px 0;
+  margin: 15px 20px 20px 25px;
+}
+.continueEmpty{ margin: 0 20px 0 25px; padding-bottom: 10px; }
+
+.contTile{
+  width: var(--cont-cover-w, 160px);
+  height: var(--cont-cover-h, 240px);
+  flex: 0 0 auto;
+  border: 1px solid rgba(255,255,255,.125); /* #20FFFFFF */
+  border-radius: var(--lib-radius-sm);
+  background: transparent;
+  cursor:pointer;
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  transition: transform 90ms ease-out;
+  will-change: transform;
+}
+.contTile:hover{ transform: scale(1.025); }
+
+.contCover{
+  border: 1px solid rgba(255,255,255,.188); /* #30FFFFFF */
+  border-radius: var(--lib-radius-sm);
+  overflow:hidden;
+  background:#000;
+  position:relative;
+  flex:1;
+}
+.contCoverImg{ width:100%; height:100%; display:block; object-fit: cover; }
+
+.contTitleWrap{ margin: 4px 4px 0; min-width:0; }
+.contTileTitle{ font-weight: 600; color: rgba(229,231,235,.92); }
+
+.contTile .contFinish,
+.contTile .contRemove{
+  position:absolute;
+  top: 6px;
+  width: 22px;
+  height: 22px;
+  padding:0;
+  display:grid;
+  place-items:center;
+  appearance:none;
+  border:1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.45);
+  color:rgba(229,231,235,.92);
+  border-radius: 6px;
+  cursor:pointer;
+  font-weight:900;
+  opacity: 0;
+  transition: opacity 90ms ease-out;
+}
+.contTile .contFinish{ left: 6px; }
+.contTile .contRemove{ right: 6px; }
+.contTile:hover .contFinish,
+.contTile:hover .contRemove{ opacity: 1; }
+.contTile .contFinish:active,
+.contTile .contRemove:active{ transform: translateY(1px); }
+
+.contTile.finished{ opacity: .78; }
+
+.contBadgeRow{
+  position:absolute;
+  left: 6px;
+  bottom: 6px;
+  display:flex;
+  gap:6px;
+}
+.contBadgeRow .badge{
+  padding: 2px 6px;
+  font-size: 11px;
+  border-radius: 999px;
+
+  /* BUILD19F_CONT_BADGE_LEGIBILITY (Build 19F)
+     INTENT: Overlay labels must remain readable across bright/high-contrast cover art.
+     This is a contrast aid only (no positioning, size, or behavior change). */
+  background: rgba(0,0,0,.45);
+  border-color: rgba(255,255,255,.18);
+  text-shadow: 0 1px 2px rgba(0,0,0,.80);
+  backdrop-filter: blur(4px);
+}
+
+/* BUILD17_CONTINUE_PERCENT_BADGE (Build 17) */
+.contPctBadge{
+  position:absolute;
+  right: 6px;
+  bottom: 6px;
+  display:flex;
+}
+.contPctBadge .badge{
+  padding: 2px 6px;
+  font-size: 11px;
+  border-radius: 999px;
+
+  /* BUILD19F_CONT_PCT_LEGIBILITY (Build 19F)
+     INTENT: Same overlay readability guarantee for the percent badge. */
+  background: rgba(0,0,0,.45);
+  border-color: rgba(255,255,255,.18);
+  text-shadow: 0 1px 2px rgba(0,0,0,.80);
+  backdrop-filter: blur(4px);
+}
+.badge-finished{
+  border:1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.35);
+  color: rgba(229,231,235,.86);
+}
+
+/* Series */
+.seriesPanel{ padding: 6px; }
+.seriesPanel .panelTitleRow{ margin-bottom: 6px; }
+
+.seriesGrid{
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 8px;
+  padding: 2px;
+}
+.seriesCard{
+  border: 1px solid rgba(255,255,255,.125); /* #20FFFFFF */
+  background: transparent;
+  border-radius: var(--lib-radius-sm);
+  padding: 6px;
+  cursor:pointer;
+  position:relative;
+  transition: transform 90ms ease-out, background 90ms ease-out, border-color 90ms ease-out;
+}
+.seriesCard:hover{
+  background: var(--lib-hover);
+  transform: scale(1.01);
+  border-color: rgba(255,255,255,.16);
+}
+
+/* Cover-first tile */
+.seriesCard .seriesCoverWrap{
+  position:relative;
+}
+
+/* Optional stacked plates (restrained) */
+.seriesCard .seriesCoverWrap::before,
+.seriesCard .seriesCoverWrap::after{
+  content:"";
+  position:absolute;
+  inset: 2px;
+  border-radius: 10px;
+  background: rgba(0,0,0,.22);
+  pointer-events:none;
+}
+.seriesCard .seriesCoverWrap::before{ transform: rotate(-4deg) translate(-2px, 2px); opacity: .55; }
+.seriesCard .seriesCoverWrap::after{ transform: rotate(3deg) translate(2px, -2px); opacity: .38; }
+
+.seriesCard .seriesCoverWrap .thumbWrap{
+  position:relative;
+  z-index: 1;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 65 / 100;
+  border: 1px solid rgba(255,255,255,.188); /* #30FFFFFF */
+  border-radius: 10px;
+  overflow:hidden;
+  background: rgba(0,0,0,.35);
+}
+
+.seriesCard .seriesCoverWrap .thumb{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: auto;
+}
+
+.seriesName{
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* INTENT: series tiles should stay cover-first tiles; this prevents the generic card flex rule from collapsing titles. */
+.seriesGrid .seriesCard{ display:block; }
+
+
+.seriesInfo{ margin-top: 6px; min-width:0; }
+.seriesTitle{
+  font-weight: 650;
+  font-size: 11px;
+}
+.seriesMeta{
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  display:flex;
+  justify-content:space-between;
+  gap: 6px;
+  min-width:0;
+}
+.seriesMeta span.mono{ flex:1; min-width:0; text-align:right; display:none; }
+
+/* Build 10: series card containment */
+/* Ensure the "X volumes" label can shrink/truncate and never bleed into neighboring tiles. */
+.seriesCard{ overflow:hidden; min-width:0; }
+.seriesMeta{ overflow:hidden; }
+.seriesMeta > span{ min-width:0; }
+.seriesMeta > span:first-child{
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  display:block;
+}
+
+.seriesRemove{
+  position:absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display:grid;
+  place-items:center;
+  appearance:none;
+  border:1px solid rgba(255,255,255,.16);
+  background: rgba(0,0,0,.35);
+  color:rgba(229,231,235,.9);
+  border-radius: 6px;
+  cursor:pointer;
+  font-weight:900;
+  opacity: 0;
+  transition: opacity 90ms ease-out;
+}
+.seriesCard:hover .seriesRemove{ opacity: 1; }
+.seriesRemove:active{ transform: translateY(1px); }
+
+/* Volumes */
+.volBar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-top: 10px;
+}
+.volControls{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.select{
+  appearance:none;
+  border:1px solid rgba(255,255,255,.25);
+  background: rgba(var(--surface-rgb),.55);
+  color:var(--text);
+  padding:8px 10px;
+  border-radius:12px;
+}
+.search{
+  border:1px solid rgba(255,255,255,.25);
+  background: rgba(var(--surface-rgb),.55);
+  color:var(--text);
+  padding:8px 10px;
+  border-radius:12px;
+  min-width: 260px;
+}
+
+/* BUILD19F_TOPBAR_SEARCH (Build 19F)
+   INTENT: The topbar search should look like a real input on grey (clear edge, readable placeholder).
+   We do not touch sizing, padding, radius, or min-width to avoid layout change. */
+.topbar .search{
+  background: var(--topbar-bg2);
+  border-color: var(--topbar-border2);
+  color: var(--topbar-text);
+  box-shadow: 0 1px 0 rgba(255,255,255,.75) inset;
+}
+
+.topbar .search::placeholder{
+  color: var(--topbar-muted);
+  opacity: 1;
+}
+
+.topbar .search:focus{
+  outline: none;
+
+  /* Keep existing accent language but tuned for grey; no size/layout impact */
+  border-color: rgba(var(--accent-rgb),.55);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.14);
+}
+
+
+.volumesList{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin-top: 8px;
+}
+.volRow{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  border:1px solid rgba(255,255,255,.22);
+  background: rgba(var(--surface-rgb),.40);
+  border-radius:var(--lib-radius);
+  padding:6px 8px;
+  cursor:pointer;
+}
+.volRow:hover{ border-color: rgba(var(--accent-rgb),.55); }
+.volInfo{ flex:1; min-width:0; }
+.volTitle{ font-weight:900; line-height:1.15; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.volRight{ display:flex; align-items:center; gap:8px; }
+.thumbWrap.small{ width:64px; height:92px; }
+.thumbWrap.small .thumb{ width:64px; height:92px; }
+.badge{
+  display:inline-flex; align-items:center; gap:6px;
+  border:1px solid rgba(var(--accent-rgb),.45);
+  background: rgba(var(--accent-rgb),.12);
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:12px;
+  color:rgba(229,231,235,.92);
+}
+
+
+
+/* Build 4 — Inside folder/series view: split preview + dense table */
+/* Build 4.5 — the inside-series panel is a dedicated view (not stacked under HomeView). */
+#seriesDetailPanel{ flex:1; min-height:0; display:flex; flex-direction:column; }
+#seriesDetailPanel .panelTitleRow{ flex:0 0 auto; }
+
+.volSplit{ display:flex; flex-direction:column; flex:1; min-height:0; gap:6px; }
+
+.volPreviewPane{
+  flex: 2 1 0;
+  min-height: 0;
+  position:relative;
+  border: 1px solid var(--lib-border);
+  border-radius: var(--lib-radius-sm);
+  background: rgba(0,0,0,.72);
+  overflow:hidden;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.volPreviewInfo{ position:absolute; top:8px; left:10px; color: rgba(229,231,235,.74); }
+.volPreviewCenter{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; padding: 10px; }
+.volPreviewImg{
+  max-width: min(540px, 72%);
+  max-height: 100%;
+  object-fit: contain;
+  image-rendering: auto;
+  border-radius: 10px;
+  border:1px solid rgba(255,255,255,.18);
+  background:#000;
+  box-shadow: 0 14px 34px rgba(0,0,0,.55);
+}
+/* Comics folder preview: use height-led sizing so covers visibly appear larger. */
+#volPreviewPane .volPreviewCenter{
+  padding: 4px !important;
+}
+#volPreviewImg{
+  width: auto;
+  height: min(92%, 560px);
+  max-width: min(640px, 84%);
+  max-height: none;
+}
+
+/* Build 11: Videos-only folder "Continue watching" widget placed inside preview pane */
+.videoFolderContinue{
+  position:absolute;
+  bottom:12px;
+  left:12px;
+  right:auto;
+  width: min(360px, 40%);
+  max-width: 380px;
+  min-width: 240px;
+  border:1px solid rgba(255,255,255,.18);
+  background: rgba(var(--surface-rgb),.42);
+  backdrop-filter: blur(10px);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  box-shadow: 0 14px 34px rgba(0,0,0,.45);
+}
+.videoFolderContinue.isRight{ right:12px; left:auto; }
+.videoFolderContinue.isLeft{ left:12px; right:auto; }
+.videoFolderContinue.hidden{ display:none; }
+.videoFolderContinueTitle{ font-weight:900; font-size: 13px; letter-spacing:.2px; }
+.videoFolderContinueMeta{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+.videoFolderContinueEp{ font-weight:800; line-height:1.15; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.videoFolderContinueFile{ opacity:.78; font-size: 11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.videoFolderContinueRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.videoFolderContinueBar{ height:8px; border-radius:999px; background: rgba(255,255,255,.14); overflow:hidden; }
+.videoFolderContinueBar > div{ height:100%; width:0%; background: rgba(var(--accent-rgb),.78); border-radius:999px; }
+.videoFolderContinueHint{ opacity:.8; font-size: 11px; }
+
+.volActionStrip{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  border:1px solid var(--lib-border);
+  border-radius: var(--lib-radius-sm);
+  background: rgba(var(--surface-rgb),.34);
+  padding: 4px 6px;
+}
+.volActionLeft{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
+.volActionRight{ display:flex; align-items:center; gap:8px; }
+.volActionSep{ width:1px; height:18px; background: rgba(255,255,255,.22); margin: 0 6px; }
+
+body:not(.inPlayer) .select-sm{ padding:4px 6px; height:28px; border-radius: var(--lib-radius-sm); font-size: 11px; }
+body:not(.inPlayer) .search-sm{ padding:4px 6px; height:28px; border-radius: var(--lib-radius-sm); font-size: 11px; min-width: 220px; }
+
+.volTableWrap{
+  flex: 1 1 0;
+  min-height: 0;
+  border: 1px solid var(--lib-border);
+  border-radius: var(--lib-radius-sm);
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  background: rgba(var(--surface-rgb),.18);
+}
+.volTableHead{
+  flex:0 0 auto;
+  display:grid;
+  grid-template-columns: 42px minmax(160px, 2.1fr) minmax(180px, 2.4fr) 70px 84px 60px 92px 132px;
+  gap:10px;
+  padding: 6px 10px;
+  background: rgba(229,231,235,.08);
+  color: rgba(229,231,235,.84);
+  border-bottom:1px solid rgba(255,255,255,.20);
+  font-weight:800;
+  user-select:none;
+}
+.volTableHead .cell{ min-width:0; }
+.volTableBody{
+  flex:1;
+  min-height:0;
+  overflow:auto;
+}
+
+.volTrow{
+  display:grid;
+  grid-template-columns: 42px minmax(160px, 2.1fr) minmax(180px, 2.4fr) 70px 84px 60px 92px 132px;
+  gap:10px;
+  padding: 4px 10px;
+  align-items:center;
+  cursor:default;
+  border-bottom:1px solid rgba(255,255,255,.12);
+}
+.volTrow:last-child{ border-bottom:0; }
+.volTrow.alt{ background: rgba(255,255,255,.03); }
+.volTrow:hover{ background: rgba(255,255,255,.06); }
+.volTrow.sel{ background: var(--lib-select); }
+.volTrow .cell{ min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+/* Build 85: Always show the full filename in episode list (no ellipsis). */
+.volTrow .cell.file{ white-space:normal; overflow:visible; text-overflow:clip; word-break:break-all; }
+
+.volTrow .cell.num{ color: rgba(229,231,235,.70); text-align:right; padding-right: 4px; }
+.volTrow .cell.read{ text-align:center; }
+
+#volumesWrap.previewHidden .volPreviewPane{ display:none; height:0; }
+#volumesWrap.previewHidden .volTableWrap{ flex: 1 1 auto; }
+
+/* Build 3.4: video episodes view uses the same split layout; mirror the hide-preview behavior */
+#videoEpisodesWrap.previewHidden .volPreviewPane{ display:none; height:0; }
+#videoEpisodesWrap.previewHidden .volTableWrap{ flex: 1 1 auto; }
+
+/* Build 3.4: video episode table has an extra Resolution column */
+#videoEpTableHead{ grid-template-columns: 42px minmax(260px, 4.2fr) 90px 92px 92px 120px 132px; }
+#videoEpisodesGrid .volTrow{ grid-template-columns: 42px minmax(260px, 4.2fr) 90px 92px 92px 120px 132px; }
+
+/* Build 10: Video episode table readability upgrades (visual progress, better alignment) */
+#videoEpisodesWrap .cell.size,
+#videoEpisodesWrap .cell.duration,
+#videoEpisodesWrap .cell.date{
+  text-align: right;
+}
+#videoEpisodesWrap .cell.resolution{
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+#videoEpisodesWrap .cell.progress{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+#videoEpisodesWrap .videoEpProgressTrack{
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.12);
+  overflow: hidden;
+}
+#videoEpisodesWrap .videoEpProgressFill{
+  height: 100%;
+  width: 0%;
+  background: rgba(255,255,255,.65);
+}
+#videoEpisodesWrap .videoEpProgressLabel{
+  flex: 0 0 auto;
+  min-width: 40px;
+  text-align: right;
+  font-size: 11px;
+  color: rgba(229,231,235,.74);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+#videoEpisodesWrap .videoEpTitleMain{
+  font-weight: 650;
+  color: rgba(229,231,235,.90);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+#videoEpisodesWrap .videoEpTitleSub{
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(229,231,235,.58);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+#videoEpisodesWrap .volTrow .cell.title{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+
+/* Build 5.1B: show subfolders as collapsible sections (seasons, specials, arcs) */
+.vidFolderSection{ border-bottom: 1px solid rgba(255,255,255,.12); }
+.vidFolderHeader{
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,.06);
+  border: 0;
+  border-bottom: 1px solid rgba(255,255,255,.12);
+  color: rgba(229,231,235,.92);
+  font-weight: 900;
+  text-align: left;
+  cursor: pointer;
+}
+.vidFolderHeader:hover{ background: rgba(255,255,255,.08); }
+.vidFolderHeadLeft{ display: flex; align-items: center; gap: 10px; min-width: 0; }
+.vidFolderCaret{ opacity: .9; transform: rotate(0deg); transition: transform .12s ease; }
+.vidFolderTitle{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vidFolderHeadRight{ display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.vidFolderMeta{ color: rgba(229,231,235,.72); font-weight: 700; font-size: 12px; }
+.vidFolderBar{
+  position: relative;
+  height: 4px;
+  width: 140px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.16);
+  overflow: hidden;
+}
+.vidFolderFill{ height: 100%; width: 0%; background: rgba(var(--accent-rgb), .75); }
+.vidFolderSection.collapsed .vidFolderCaret{ transform: rotate(-90deg); }
+.vidFolderSection.collapsed .vidFolderBody{ display: none; }
+
+/* Build 22: inside-show explorer folder rows */
+.volTrow.folderRow{ cursor: pointer; }
+.volTrow.folderRow:hover{ background: rgba(255,255,255,.08); }
+.volTrow.folderRow .cell.title{ font-weight: 800; }
+
+
+/* Volume navigator overlay */
+.volNavOverlay{
+  position:fixed;
+  inset:0;
+  background: rgba(0,0,0,.65);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+  z-index:55;
+}
+.volNavCard{
+  width:min(860px, 100%);
+  max-height: min(82vh, 760px);
+  overflow:hidden;
+  background: var(--panel);
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:14px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.volNavTop{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.volNavTitle{ font-weight:900; font-size:18px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.volNavSearch{ width:100%; min-width:0; }
+.volNavList{ flex:1; overflow:auto; display:flex; flex-direction:column; gap:10px; padding-right:6px; }
+.volNavItem{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  border:1px solid rgba(255,255,255,.22);
+  background: rgba(var(--surface-rgb),.40);
+  border-radius:16px;
+  padding:10px 12px;
+  cursor:pointer;
+}
+.volNavItem:hover{ border-color: rgba(var(--accent-rgb),.55); }
+.volNavItem.active{ border-color: rgba(var(--accent-rgb),.85); box-shadow: 0 0 0 2px rgba(var(--accent-rgb),.18) inset; }
+.volNavInfo{ flex:1; min-width:0; }
+.volNavMain{ font-weight:900; line-height:1.15; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.volNavMeta{ color:var(--muted); font-size:12px; margin-top:2px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.volNavRight{ display:flex; align-items:center; gap:8px; }
+.volNavPill{
+  display:inline-flex; align-items:center;
+  border:1px solid rgba(var(--accent-rgb),.45);
+  background: rgba(var(--accent-rgb),.12);
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:12px;
+  color:rgba(229,231,235,.92);
+  white-space:nowrap;
+}
+
+/* Keys overlay */
+.keysOverlay{
+  position:fixed;
+  inset:0;
+  background: rgba(0,0,0,.65);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+  z-index:50;
+}
+.keysCard{
+  width:min(980px, 100%);
+  max-height: min(80vh, 720px);
+  overflow:auto;
+  background: var(--panel);
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:14px;
+}
+.keysTop{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.keysTitle{ font-weight:900; font-size:18px; }
+.keysCols{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:12px; }
+.keysHead{ font-weight:800; margin-bottom:8px; }
+.keysLine{ display:flex; justify-content:space-between; gap:14px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,.14); }
+.keysLine:last-child{ border-bottom:0; }
+.key{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-weight:800;
+  border:1px solid rgba(255,255,255,.22);
+  background: rgba(var(--surface-rgb),.35);
+  padding:3px 8px;
+  border-radius:10px;
+  white-space:nowrap;
+}
+.desc{ color:var(--muted); font-size:13px; text-align:right; }
+.keysHint{ margin-top:12px; }
+
+/* Library settings overlay (Build 42A) */
+.settingsOverlay{
+  position:fixed;
+  inset:0;
+  background: rgba(0,0,0,.65);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+  z-index:52;
+}
+.settingsCard{
+  width:min(720px, 100%);
+  max-height: min(82vh, 760px);
+  overflow:auto;
+  background: var(--panel);
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:14px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+/* INTENT: Use an explicit system font stack here so the header stays consistent without bundled font assets. */
+.settingsTop{
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.settingsTop *{
+  font-family: inherit;
+}
+
+.settingsTitle{ font-weight:900; font-size:18px; }
+.settingsGroup{ display:flex; flex-direction:column; gap:6px; }
+.settingsLabel{ font-weight:800; }
+.settingsNum{ width: 260px; max-width: 100%; }
+.settingsActions{ display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top: 6px; }
+
+/* Build 45D: Hidden series list (library overlay) */
+.hiddenSeriesList{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin-top: 6px;
+}
+
+.hiddenSeriesRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding: 8px 10px;
+  border:1px solid var(--lib-border);
+  border-radius: var(--lib-radius-sm);
+  background: rgba(var(--surface-rgb),.35);
+}
+
+.hiddenSeriesText{
+  min-width:0;
+  flex: 1 1 auto;
+}
+
+.hiddenSeriesName{
+  font-weight: 850;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.hiddenSeriesPath{
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+@media (max-width: 760px){
+  .keysCols{ grid-template-columns: 1fr; }
+  .search{ min-width: 180px; }
+}
+
+/* Player */
+.playerBar{
+  position: relative;
+  display:flex;
+  align-items:center;
+  width: 100%;
+  padding: 10px 14px 16px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  transition: opacity .18s ease, transform .18s ease;
+  will-change: opacity, transform;
+  pointer-events: none;
+}
+.playerBar::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  /* Build 7 — softer YouTube-style fade (no boxed panel) */
+  background: linear-gradient(to bottom,
+    rgba(0,0,0,.72) 0%,
+    rgba(0,0,0,.40) 40%,
+    rgba(0,0,0,0) 100%);
+  pointer-events:none;
+}
+.playerBar .ytHudRow{
+  position: relative;
+  z-index: 1;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+  width: 100%;
+}
+.playerBar .ytTopLeft{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  min-width: 0;
+}
+.playerBar button{ pointer-events:auto; }
+
+/* Build 7 — Player icon button polish (YouTube-like) */
+body.inPlayer .iconBtn.ytIcon{
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  color: rgba(255,255,255,.94);
+  border-radius: 999px;
+  font-size: 16px;
+  text-shadow: 0 2px 10px rgba(0,0,0,.55);
+  transition: background .12s ease, transform .12s ease, opacity .12s ease;
+}
+body.inPlayer .iconBtn.ytIcon:hover{ background: rgba(255,255,255,.12); }
+body.inPlayer .iconBtn.ytIcon:active{ background: rgba(255,255,255,.18); transform: scale(.98); }
+body.inPlayer .iconBtn.ytIcon:focus-visible{
+  outline: 2px solid rgba(255,255,255,.75);
+  outline-offset: 2px;
+}
+body.inPlayer #playBtn.ytIcon{
+  width: 42px;
+  height: 42px;
+  font-size: 18px;
+}
+
+/* Build 19: larger bottom-row controls (easier to hit) */
+body.inPlayer .playerFooter .iconBtn.ytIcon{
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+}
+body.inPlayer .playerFooter #playBtn.ytIcon{
+  width: 54px;
+  height: 54px;
+  font-size: 22px;
+}
+
+.playerMeta{ flex:1; min-width: 0; }
+.nowTitle{
+  font-weight: 900;
+  font-size: 14px;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+  color: rgba(255,255,255,.95);
+  text-shadow: 0 2px 10px rgba(0,0,0,.55);
+}
+.nowSub{
+  font-size:12px;
+  margin-top:2px;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+  color: rgba(255,255,255,.78);
+  text-shadow: 0 2px 10px rgba(0,0,0,.55);
+}
+.playerControls{ display:flex; gap:10px; flex-wrap:wrap; }
+
+.stageWrap{
+  position:relative;
+  border:1px solid var(--border);
+  border-radius:16px;
+  overflow:hidden;
+  background:#000;
+}
+#stage{
+  width:100%;
+  height:auto;
+  display:block;
+  background:#000;
+}
+.clickZones{
+  position:absolute; inset:0; display:grid;
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.zone{ cursor:pointer; }
+/* Build 32: manual scroller overlay (visual only) */
+.manualScroller{
+  position:absolute;
+  top: 12px;
+  bottom: 12px;
+  right: 10px;
+  width: 12px;
+  z-index: 30;
+  display:none;
+  pointer-events: none;
+}
+.manualScrollerTrack{
+  position:absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-radius: 999px;
+  background: transparent;
+  pointer-events: auto;
+  cursor: ns-resize;
+}
+
+/* FIND_THIS:LONG_STRIP_CORNER_PREFS_STYLE (Tankoban Build 17)
+   BUILD 7: UI-only transplant from Build 23.
+   Why this exists: Build 23 hides the quick settings row for a cleaner HUD and
+   uses a tiny floating "Prefs" pill to open the Mega Settings overlay.
+*/
+.cornerPrefsBtn{
+  position:absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 60;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 850;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.45);
+  color: rgba(255,255,255,.92);
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  backdrop-filter: blur(10px);
+}
+body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
+.cornerPrefsBtn:hover{ background: rgba(0,0,0,.58); }
+.cornerPrefsBtn:active{ background: rgba(0,0,0,.68); transform: scale(.98); }
+.cornerPrefsBtn:focus-visible{ outline: 2px solid rgba(229,231,235,.46); outline-offset: 2px; }
+.manualScrollerTrack::after{
+  content:"";
+  position:absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.14);
+}
+.manualScrollerThumb{
+  position:absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 30%;
+  width: 7px;
+  height: 54px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.28);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.18);
+  pointer-events: auto;
+  cursor: ns-resize;
+}
+
+/* Build 33: subtle feedback while dragging */
+.manualScroller.dragging .manualScrollerThumb{
+  background: rgba(255,255,255,.42);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.22);
+}
+
+/* Build 25: click-zone flash feedback (subtle acknowledgement + busy variant) */
+@keyframes zoneFlash {
+  0% { background-color: rgba(255,255,255,0); }
+  35% { background-color: rgba(255,255,255,.08); }
+  100% { background-color: rgba(255,255,255,0); }
+}
+.zone.zoneFlash{
+  animation: zoneFlash 90ms ease-out;
+}
+
+@keyframes zoneFlashBlocked {
+  0% { background-color: rgba(255,120,120,0); }
+  35% { background-color: rgba(255,120,120,.10); }
+  100% { background-color: rgba(255,120,120,0); }
+}
+.zone.zoneFlashBlocked{
+  animation: zoneFlashBlocked 90ms ease-out;
+}
+
+.playerFooter{
+  position: relative;
+  display:flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  transition: opacity .18s ease, transform .18s ease;
+  will-change: opacity, transform;
+  pointer-events: none;
+}
+.playerFooter::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  /* Build 7 — softer YouTube-style fade (no boxed panel) */
+  background: linear-gradient(to top,
+    rgba(0,0,0,.82) 0%,
+    rgba(0,0,0,.46) 42%,
+    rgba(0,0,0,0) 100%);
+  pointer-events:none;
+}
+.playerFooter .ytScrubRow,
+.playerFooter .ytControlsRow{
+  position: relative;
+  z-index: 1;
+}
+
+/* Build 8: quick settings row */
+.playerFooter .ytQuickRow{
+  position: relative;
+  z-index: 1;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap: 8px;
+  margin-top: -4px;
+  pointer-events: none;
+}
+.playerFooter .ytQuickRow button{ pointer-events:auto; }
+.playerFooter .ytQuickRow .ytQuickIcon{
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+}
+
+/* Build 38D: make speed prominent (always-visible text button) */
+.playerFooter .ytQuickRow .ytQuickSpeed{
+  width: auto;
+  min-width: 220px;
+  max-width: 62vw;
+  padding: 0 14px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Build 35: Auto/Manual mode toggle + disabled speed in Manual Scroll */
+.playerFooter .ytQuickRow #quickSpeedBtn:disabled{
+  opacity: .35;
+  cursor: default;
+}
+.playerFooter .ytQuickRow .ytQuickMode{
+  width: auto;
+  min-width: 74px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+}
+/* Build 15: slightly larger quick icons for readability */
+.playerFooter .ytQuickSep{
+  width: 1px;
+  height: 18px;
+  background: rgba(255,255,255,.20);
+  border-radius: 999px;
+}
+
+/* Build 19: scroll speed slider */
+.speedSliderOverlay{
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  pointer-events: auto;
+}
+.speedSliderCard{
+  position: absolute;
+  transform: translate(-50%, -100%);
+  min-width: 220px;
+  padding: 10px 12px 12px;
+  border-radius: 14px;
+  background: rgba(var(--surface-rgb),.88);
+  border: 1px solid rgba(255,255,255,.24);
+  box-shadow: 0 18px 42px rgba(0,0,0,.45);
+  backdrop-filter: blur(10px);
+}
+.speedSliderTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.speedSliderValue{
+  font-size: 11px;
+  font-weight: 900;
+  color: rgba(229,231,235,.95);
+}
+.speedSliderTrack{
+  position: relative;
+  width: 240px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.18);
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+}
+.speedSliderFill{
+  position:absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 4px;
+  width: 0%;
+  border-radius: 999px;
+  background: rgba(255,255,255,.78);
+}
+.speedSliderThumb{
+  position:absolute;
+  top: 50%;
+  left: 0%;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(229,231,235,.95);
+  box-shadow: 0 10px 22px rgba(0,0,0,.35);
+}
+.playerFooter .ytControlsRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 14px;
+}
+.ytLeftControls,
+.ytRightControls{ display:flex; align-items:center; gap:10px; }
+.ytPageText{
+  font-size: 11px;
+  font-weight: 900;
+  color: rgba(255,255,255,.92);
+  text-shadow: 0 2px 10px rgba(0,0,0,.55);
+}
+
+.playerFooter button,
+.playerFooter #scrub{ pointer-events:auto; }
+.hudExtras{ display:none; }
+.kv{ display:flex; gap:8px; align-items:center; }
+.k{ font-size:12px; color:var(--muted); }
+.v{ font-size:12px; }
+.spacer{ flex:1; }
+.miniControls{ display:flex; gap:8px; }
+.chip{
+  appearance:none; cursor:pointer;
+  position: relative; /* INTENT: anchor active checkmark without changing chip layout */
+  border:1px solid rgba(255,255,255,.25);
+  background: rgba(var(--surface-rgb),.55);
+  color:var(--text);
+  padding:6px 10px;
+  border-radius:999px;
+  font-weight:800;
+  font-size:12px;
+}
+.chip.active{ border-color: rgba(var(--accent-rgb),.55); background: rgba(var(--accent-rgb),.14); }
+.chip.active::after,
+.chip[aria-pressed="true"]::after{
+  content:'✓';
+  position:absolute;
+  right:6px;
+  top:50%;
+  transform:translateY(-50%);
+  pointer-events:none;
+}
+
+
+
+.scrubWrap{
+  width: 100%;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-top: 0;
+}
+
+/* Build 35: quick actions on the scrub bar (minimal symbols). */
+.playerFooter .scrubActions{
+  pointer-events: auto;
+  display:flex;
+  align-items:center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.playerFooter .scrubActionBtn{
+  pointer-events: auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.28);
+  color: rgba(255,255,255,.92);
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 900;
+  display:grid;
+  place-items:center;
+  cursor: pointer;
+  user-select:none;
+  -webkit-user-select:none;
+  backdrop-filter: blur(10px);
+}
+.playerFooter .scrubActionBtn:hover{ background: rgba(0,0,0,.45); }
+.playerFooter .scrubActionBtn:active{ background: rgba(0,0,0,.58); transform: scale(.98); }
+.playerFooter .scrubActionBtn:focus-visible{ outline: 2px solid rgba(229,231,235,.46); outline-offset: 2px; }
+
+/* Build 5: Two-Page (Scroll) row gap control (only visible in that mode). */
+.playerFooter .twoPageScrollRowGapWrap{
+  pointer-events: auto;
+  display:flex;
+  align-items:center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.playerFooter .twoPageScrollRowGapInput{
+  width: 60px;
+  padding: 4px 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.22);
+  background: rgba(var(--surface-rgb),.35);
+  color: rgba(255,255,255,.92);
+  font-size: 12px;
+  font-weight: 800;
+}
+.playerFooter .twoPageScrollRowGapInput:focus{ outline: none; }
+.scrubLabel{ display:none; }
+.scrub{
+  position:relative;
+  height: 18px;
+  flex:1;
+  border-radius: 999px;
+  background: transparent;
+  border: 0;
+  cursor:pointer;
+  user-select:none;
+}
+/* Build 28: premium hitbox — keep visuals thin, but make the scrub area easier to grab. */
+.scrub::before{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:-10px;
+  bottom:-10px;
+  border-radius:999px;
+  background: transparent;
+}
+.scrubTrack{
+  position:absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 3px;
+  border-radius:999px;
+  background: rgba(255,255,255,.22);
+  transition: height .14s ease;
+}
+.scrubFill{
+  position:absolute;
+  left:0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 3px;
+  width: 0%;
+  border-radius: 999px;
+  background: rgba(255,255,255,.78);
+  transition: height .14s ease;
+}
+
+/* Build 85: Chapter markers on the timeline (only when chapters exist). */
+.scrubChapters{
+  position:absolute;
+  left:0; right:0;
+  top:0; bottom:0;
+  pointer-events:none; /* Container doesn't capture clicks */
+  opacity:1; /* BUILD 89: Full opacity for bright red markers */
+  z-index: 10; /* BUILD 89: Above track and fill */
+}
+.scrubChapterMark{
+  position:absolute;
+  top:0; bottom:0;
+  width:2px; /* BUILD 89: Wider for visibility */
+  background: #FFFFFF; /* BUILD 89: Bright red for visibility */
+  z-index: 9999; /* BUILD 89: High z-index to ensure visibility */
+  pointer-events: auto; /* BUILD 89: Ensure clickable */
+}
+.videoScrub--minimal .scrubChapterMark{
+  background: #FFFFFF; /* BUILD 89: Bright red override */
+  width: 2px; /* BUILD 89: Wider for visibility */
+  z-index: 9999; /* BUILD 89: High z-index */
+}
+
+.scrubThumb{
+  position:absolute;
+  top:50%;
+  left:0%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(229,231,235,.95);
+  box-shadow: 0 8px 18px rgba(0,0,0,.28);
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+.scrubBubble{
+  position:absolute;
+  top: -34px;
+  left: 0%;
+  transform: translateX(-50%);
+  background: rgba(var(--surface-rgb),.86);
+  border:1px solid rgba(255,255,255,.26);
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: rgba(229,231,235,.95);
+  white-space:nowrap;
+  opacity: 0;
+  transition: opacity .12s ease;
+  pointer-events:none;
+  box-shadow: 0 10px 22px rgba(0,0,0,.35);
+}
+.scrub:hover .scrubBubble,
+.scrub:active .scrubBubble,
+.scrub.dragging .scrubBubble{ opacity: 1; }
+
+.scrub:hover .scrubTrack,
+.scrub:active .scrubTrack,
+.scrub:hover .scrubFill,
+.scrub:active .scrubFill,
+.scrub.dragging .scrubTrack,
+.scrub.dragging .scrubFill{ height: 6px; }
+
+.scrub:hover .scrubThumb,
+.scrub:active .scrubThumb,
+.scrub.dragging .scrubThumb{ opacity: 1; }
+
+.hint{ margin-left:auto; }
+
+.toast{
+  position: fixed;
+  left: 50%;
+  bottom: var(--toastBottom, 18px);
+  transition: bottom 140ms ease-out;
+  transform: translateX(-50%);
+  background: rgba(var(--surface-rgb),.85);
+  border:1px solid rgba(255,255,255,.28);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  backdrop-filter: blur(8px);
+  z-index: 99;
+}
+
+/* FIND_THIS:CONTEXT_MENU_STYLES */
+.contextMenu{
+  position: fixed;
+  min-width: 190px;
+  max-width: 280px;
+  padding: 6px;
+  background: rgba(var(--surface-rgb), .94);
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 12px;
+  box-shadow: 0 18px 60px rgba(0,0,0,.55);
+  backdrop-filter: blur(10px);
+  z-index: 120;
+}
+.contextMenu.hidden{ display:none !important; }
+
+.contextMenuItem{
+  width: 100%;
+  display: block;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.contextMenuItem:hover{ background: rgba(255,255,255,.08); }
+
+.contextMenuItem.disabled{
+  opacity: .45;
+  cursor: default;
+}
+.contextMenuItem.disabled:hover{ background: transparent; }
+
+.contextMenuItem.danger{
+  color: rgb(248,113,113);
+}
+
+.contextMenuSep{
+  height: 1px;
+  margin: 6px 6px;
+  background: rgba(255,255,255,.14);
+}
+
+/* End-of-volume overlay */
+.endOverlay{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background: rgba(0,0,0,.55);
+  z-index: 30;
+}
+.endOverlay.hidden{ display:none; }
+.endCard{
+  width: min(520px, calc(100vw - 32px));
+  background: rgba(var(--surface-rgb),.92);
+  border: 1px solid rgba(255,255,255,.28);
+  border-radius: 18px;
+  padding: 16px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 18px 60px rgba(0,0,0,.55);
+}
+.endTitle{ font-weight: 800; font-size: 18px; margin-bottom: 6px; }
+.endSub{ margin-bottom: 14px; }
+.endActions{ display:flex; gap:10px; flex-wrap:wrap; }
+.endHint{ margin-top: 10px; }
+
+
+
+/* Mega Settings (Build 6A) */
+.megaSettingsOverlay{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:flex-end;
+  justify-content:flex-end;
+  padding: 12px 14px 78px;
+  /* Slightly stronger dim to match YouTube popover feel */
+  background: rgba(0,0,0,.28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s ease;
+  z-index:45;
+}
+
+.megaSettingsOverlay.floater{
+  align-items:flex-start;
+  justify-content:flex-start;
+  padding: 0;
+}
+.megaSettingsOverlay.floater .megaSettingsPanel{
+  position:absolute;
+  left: var(--megaX, 12px);
+  top: var(--megaY, 12px);
+}
+
+.megaSettingsOverlay.open{
+  opacity: 1;
+  pointer-events: auto;
+}
+.megaSettingsPanel{
+  width: min(340px, calc(100vw - 28px));
+  background: rgba(var(--surface-rgb),.94);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 16px;
+  overflow:hidden;
+  box-shadow: 0 18px 60px rgba(0,0,0,.55);
+  backdrop-filter: blur(10px);
+  transform: translateY(8px) scale(.985);
+  transition: transform .14s ease, opacity .14s ease;
+  opacity: .98;
+}
+.megaSettingsOverlay.open .megaSettingsPanel{ transform: translateY(0) scale(1); opacity: 1; }
+.megaPanel{ padding: 10px; }
+.megaTitle{
+  font-weight: 900;
+  font-size: 13px;
+  color: rgba(229,231,235,.92);
+  padding: 6px 8px 8px;
+}
+.megaRow{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  border:0;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 8px;
+  border-radius: 12px;
+  cursor:pointer;
+  text-align:left;
+}
+.megaRow:hover{ background: rgba(255,255,255,.08); }
+.megaRow:active{ background: rgba(255,255,255,.12); }
+.megaRow:focus-visible{ outline: 2px solid rgba(229,231,235,.46); outline-offset: 2px; }
+.megaLeft{ font-weight: 800; font-size: 13px; }
+.megaRight{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color: rgba(229,231,235,.78);
+  font-size: 13px;
+}
+.megaValue{
+  max-width: 160px;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+}
+.megaChevron{
+  opacity:.9;
+  font-size: 12px;
+  line-height: 1;
+}
+.megaFoot{ padding: 10px 8px 6px; }
+
+.megaSubTop{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding: 4px 4px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.14);
+}
+/* FIND_THIS:BUILD18_MEGA_TEXT_BUTTONS (Tankoban Build 18)
+   BUILD 7: Build 23 uses text buttons ("Back", "Open") instead of arrow glyphs.
+   This is purely cosmetic; the Mega Settings behavior is unchanged.
+*/
+.megaBackBtn{ width:auto; min-width: 56px; height: 30px; padding: 0 10px; display:flex; align-items:center; justify-content:center; }
+.megaSubTitle{
+  font-weight: 900;
+  font-size: 13px;
+  color: rgba(229,231,235,.92);
+}
+.megaSubList{
+  display:flex;
+  flex-direction:column;
+  gap: 2px;
+  padding: 0 2px 4px;
+}
+.megaOption{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  border:0;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 10px;
+  border-radius: 12px;
+  cursor:pointer;
+  text-align:left;
+}
+.megaOption:hover{ background: rgba(255,255,255,.08); }
+.megaOption:active{ background: rgba(255,255,255,.12); }
+
+.megaOption:disabled{
+  opacity: .55;
+  cursor: default;
+}
+.megaOption:disabled:hover{ background: transparent; }
+
+.megaSubLabel{
+  margin: 8px 10px 2px;
+  font-size: 11px;
+  opacity: .75;
+  letter-spacing: .02em;
+  pointer-events: none;
+}
+
+.megaOption:focus-visible{ outline: 2px solid rgba(229,231,235,.46); outline-offset: 2px; }
+.megaCheck{
+  color: rgba(var(--accent-rgb),.95);
+  font-weight: 900;
+}
+.megaOptionRight{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  color: rgba(229,231,235,.78);
+  font-size: 13px;
+}
+
+/* BUILD28_ROTATE_CROP: slider rows inside Mega submenu */
+.megaControlRow{
+  margin: 8px 8px 0;
+  padding: 10px 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.04);
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.megaControlTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  font-size: 12px;
+}
+
+.megaControlValue{
+  opacity: .8;
+  font-variant-numeric: tabular-nums;
+}
+
+.megaRange{
+  width: 100%;
+}
+
+/* Submenu swap polish (display none remains; fade/slide on show only) */
+.megaMainPanel:not(.hidden){ animation: megaIn .12s ease; }
+.megaSubPanel:not(.hidden){ animation: megaIn .12s ease; }
+@keyframes megaIn{
+  from{ opacity: .75; transform: translateY(4px); }
+  to{ opacity: 1; transform: translateY(0); }
+}
+
+/* HUD hide */
+body.hudHidden .playerBar,
+body.hudHidden .playerFooter,
+/* FIND_THIS:BUILD19_PREFS_HUD_HIDE (Tankoban Build 19) */
+body.hudHidden .cornerPrefsBtn{
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events:none;
+  /* Build 26: tiny hide delay reduces boundary flicker during hovery interactions */
+  transition-delay: 120ms;
+}
+
+/* Build 26: freeze HUD auto-hide during interaction states (scrub/overlays).
+   Uses the existing body.hudHidden system — this simply overrides visibility while frozen. */
+body.hudHidden.hudFreeze .playerBar,
+body.hudHidden.hudFreeze .playerFooter{
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0ms;
+  pointer-events: none;
+}
+
+
+/* Hide app header while reading */
+body.inPlayer .topbar{ display:none !important; }
+
+
+/* Thumbnails */
+.thumbWrap{
+  width: 60px;
+  height: 84px;
+  border-radius: 12px;
+  background: rgba(0,0,0,.6);
+  border: 1px solid rgba(255,255,255,.22);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.thumb{
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit: cover;
+  background:#000;
+}
+.contCard{ display:flex; gap:10px; align-items:center; }
+.contCard .contInfo{ min-width:0; flex:1; }
+.seriesCard{ display:flex; gap:12px; align-items:center; }
+.seriesCard .seriesInfo{ min-width:0; flex:1; }
+.bookCard{ display:flex; gap:12px; align-items:center; }
+.bookCard .bookInfo{ min-width:0; flex:1; }
+.speedBtns{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  flex-wrap: wrap;
+}
+.chip.speed{
+  padding:6px 12px;
+}
+
+
+/* True edge-to-edge player */
+body.inPlayer{ overflow:hidden; }
+body.inPlayer main{ padding:0 !important; max-width:none !important; margin:0 !important; }
+body.inPlayer #playerView{ height:100vh; gap:0 !important; grid-template-rows: auto 1fr auto; }
+body.inPlayer .stageWrap{ border:0 !important; border-radius:0 !important; height:100%; }
+body.inPlayer #stage{ width:100vw !important; height:100% !important; }
+
+body.inPlayer .stageWrap{ min-height:0; }
+
+body.inPlayer .stageWrap{ background:#000 !important; }
+
+
+/* Player: stage always full screen, HUD overlays (does NOT shrink pages) */
+body.inPlayer #playerView{
+  position: fixed !important;
+  inset: 0 !important;
+  height: 100vh !important;
+  width: 100vw !important;
+  display: block !important;
+}
+body.inPlayer .stageWrap{
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #000 !important;
+  min-height: 0 !important;
+}
+body.inPlayer #stage{
+  width: 100% !important;
+  height: 100% !important;
+  display:block;
+}
+body.inPlayer .clickZones{
+  position:absolute !important;
+  inset:0 !important;
+}
+body.inPlayer .manualScroller{
+  display:block;
+}
+body.inPlayer .playerBar{
+  position:absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 20 !important;
+  backdrop-filter: none;
+}
+body.inPlayer .playerFooter{
+  position:absolute !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 20 !important;
+  backdrop-filter: none;
+}
+
+/* Player-mode icon buttons (YouTube-ish) */
+body.inPlayer .iconBtn{
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0,0,0,.38);
+}
+body.inPlayer .iconBtn:hover{ background: rgba(0,0,0,.52); }
+body.inPlayer .ytPlay{ width: 38px; height: 38px; }
+
+/* Loading overlay (spinner + optional progress bar) */
+.loadingOverlay{
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,.45);
+  z-index: 200;
+}
+.loadingOverlay.hidden{ display:none; }
+.loadingCard{
+  display:flex;
+  align-items:center;
+  gap: 12px;
+  width: min(560px, calc(100vw - 32px));
+  background: rgba(var(--surface-rgb),.92);
+  border:1px solid rgba(255,255,255,.28);
+  border-radius: 18px;
+  padding: 14px 16px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 18px 60px rgba(0,0,0,.55);
+}
+.spinner{
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 3px solid rgba(229,231,235,.28);
+  border-top-color: rgba(229,231,235,.95);
+  animation: spin .9s linear infinite;
+  flex: 0 0 auto;
+}
+@keyframes spin{ to{ transform: rotate(360deg); } }
+.loadingTitle{ font-weight: 900; }
+.loadingSub{ max-width: 56vw; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.loadingBarWrap{
+  margin-top: 7px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.18);
+  border:1px solid rgba(255,255,255,.20);
+  overflow:hidden;
+}
+.loadingBar{
+  height: 100%;
+  width: 0%;
+  background: rgba(var(--accent-rgb),.55);
+}
+
+
+/* -----------------------------
+   Thumbnail warm-up bar
+------------------------------*/
+.warmupBar{
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 55;
+  background: rgba(0,0,0,0.85);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: auto;
+}
+.warmupText{
+  font-size: 12px;
+  color: rgba(255,255,255,0.90);
+}
+
+/* -----------------------------
+   Debug overlay (default-off)
+   Must never affect viewport measurements.
+------------------------------*/
+.debugOverlay{
+  position: fixed;
+  left: 10px;
+  top: 10px;
+  z-index: 999;
+  max-width: min(520px, calc(100vw - 20px));
+  background: rgba(0,0,0,0.70);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(255,255,255,0.92);
+  pointer-events: none;
+  white-space: pre;
+}
+
+
+/* Build 43B: control mode menu (YouTube-resolution style) */
+.modeMenu{
+  position:fixed;
+  z-index: 90;
+  min-width: 168px;
+  background: rgba(var(--surface-rgb),.94);
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 14px;
+  padding: 6px;
+  box-shadow: 0 18px 60px rgba(0,0,0,.55);
+  backdrop-filter: blur(10px);
+}
+.modeMenuItem{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border:0;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor:pointer;
+  letter-spacing: .2px;
+}
+.modeMenuItem:hover{
+  background: rgba(255,255,255,.08);
+}
+.modeMenuItem.active{
+  background: rgba(255,255,255,.14);
+}
+
+
+  /* BUILD16C_AUTOFIP_COUNTDOWN: top-left timer for Auto Flip */
+  .autoFlipCountdown{
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 60;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    letter-spacing: .4px;
+    background: rgba(0,0,0,.55);
+    border: 1px solid rgba(255,255,255,.14);
+    color: rgba(255,255,255,.92);
+    pointer-events: none;
+  }
+
+
+  /* BUILD16C_SCAN_PILL: subtle indicator during background worker scans */
+  .scanPill{
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    color: rgba(255,255,255,.82);
+    background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.12);
+    margin-right: 10px;
+    pointer-events: auto;
+    gap: 8px;
+  }
+
+  .scanPillBtn{
+    pointer-events: auto;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-size: 12px;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 8px;
+    opacity: .8;
+    cursor: pointer;
+  }
+  .scanPillBtn:hover{ opacity: 1; background: rgba(255,255,255,.08); }
+
+  .settingsTextArea{
+    width: 100%;
+    resize: vertical;
+    min-height: 72px;
+    padding: 10px 12px;
+    border-radius: 10px;
+  }
+
+
+/* BUILD 19H_LOUPE + overlays (Build 19H)
+   INTENT: Minimal, non-invasive HUD and small dialog sizing using existing overlay tokens. */
+
+.gotoCard{
+  width: min(420px, calc(100vw - 32px));
+}
+
+.fxCard{
+  width: min(520px, calc(100vw - 32px));
+}
+
+.fxRow{
+  display:flex;
+  align-items:center;
+  gap:0px;
+}
+
+.fxRange{
+  flex:1;
+}
+
+.fxVal{
+  width:54px;
+  text-align:right;
+}
+
+.fxChecks{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.fxCheck{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  user-select:none;
+}
+
+.loupeHud{
+  position:absolute;
+  right: 14px;
+  bottom: 86px; /* stays above footer scrub UI */
+  width: 220px;
+  height: 220px;
+  border-radius: 14px;
+  overflow:hidden;
+  border: 1px solid rgba(255,255,255,.22);
+  box-shadow: 0 10px 26px rgba(0,0,0,.45);
+  background: rgba(0,0,0,.55);
+  z-index: 28; /* below settings overlays, above canvas */
+  pointer-events:none; /* INTENT: must not affect click zones */
+}
+
+.loupeHud.hidden{ display:none; }
+
+#loupeCanvas{
+  width: 100%;
+  height: 100%;
+  display:block;
+}
+
+/* BUILD 20_LOUPE_ZOOM_OVERLAY (Build 20)
+   INTENT: Small, consistent modal sizing; reuse existing row styling (fxRow/fxRange). */
+.loupeCard{
+  width: min(460px, calc(100vw - 32px));
+}
+
+/* BUILD 20B_LOUPE_SIZE_APPLY (Build 20B)
+   INTENT: Size the loupe HUD via a CSS variable so JS can adjust it without touching click zones.
+   This rule is appended to override the earlier fixed 220px sizing. */
+.loupeHud{
+  width: min(var(--loupeSize, 220px), calc(100vw - 28px));
+  height: min(var(--loupeSize, 220px), calc(100vh - 140px));
+}
+
+/* Tankoban Plus Build 1: mode switch + video views */
+.modeSwitch{ display:flex; gap:6px; align-items:center; justify-content:center; margin-top:6px; }
+.modeBtn{ padding:6px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.16); background:rgba(255,255,255,0.06); color:inherit; cursor:pointer; font-size:12px; }
+.modeBtn.active{ background:rgba(255,255,255,0.14); border-color:rgba(255,255,255,0.28); }
+
+.scanPill{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); }
+.scanCancel{ padding:6px 8px; border-radius:10px; border:1px solid rgba(255,255,255,0.16); background:rgba(255,255,255,0.08); color:inherit; cursor:pointer; font-size:12px; }
+
+.videoList{ display:flex; flex-direction:column; gap:6px; padding:10px; }
+.videoRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.10); background:rgba(255,255,255,0.04); cursor:pointer; }
+.videoRow:hover{ background:rgba(255,255,255,0.06); }
+.videoRowLeft{ min-width:0; flex:1; display:flex; align-items:center; gap:10px; }
+.videoThumb{ width:96px; height:54px; border-radius:10px; object-fit:cover; background:rgba(0,0,0,0.7); border:1px solid rgba(255,255,255,0.10); flex:0 0 auto; }
+.videoRowMain{ min-width:0; display:flex; flex-direction:column; gap:2px; }
+.videoRowTitle{ font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.videoRowMeta{ font-size:11px; opacity:0.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.videoRowMetaLines{ display:flex; flex-direction:column; gap:2px; }
+.videoProgressBar{ height:4px; border-radius:999px; background:rgba(255,255,255,0.12); overflow:hidden; margin-top:4px; }
+.videoProgressFill{ height:100%; width:var(--pct, 0%); background:rgba(255,255,255,0.50); }
+.videoRowRight{ display:flex; align-items:center; gap:8px; }
+.videoBadge{ font-size:11px; padding:3px 8px; border-radius:999px; border:1px solid rgba(255,255,255,0.16); background:rgba(255,255,255,0.06); opacity:0.9; }
+.videoRemoveBtn{ padding:6px 8px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); cursor:pointer; }
+
+/* Build 45 — Videos: sidebar rows align with Comics folder tree (typography + spacing). */
+#videoFoldersList .videoRow{
+  padding: 4px 6px;
+  border-radius: var(--lib-radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+}
+#videoFoldersList .videoRow:hover{
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.08);
+}
+#videoFoldersList .videoRowTitle{ font-size: 12px; font-weight: 600; }
+#videoFoldersList .videoRowMeta{ font-size: 11px; opacity: 0.75; }
+#videoFoldersList .videoRow{ box-shadow: none; }
+#videoFoldersList .videoRemoveBtn{ padding: 4px 8px; border-radius: 10px; }
+
+
+.videoPlayerShell{
+  height:calc(100vh - 56px);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:12px;
+}
+
+/* Video player chrome — Noir polish (Build 110)
+   INTENT: Make the player feel "real" (VLC/PotPlayer vibe) without overlaying the native surface.
+   Controls stay outside the render surface; readability comes from subtle panels + gradients. */
+.videoPlayerBar{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px 10px;
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,0.10);
+  background:rgba(10,10,12,0.78);
+  box-shadow: 0 12px 36px rgba(0,0,0,0.45);
+  backdrop-filter: blur(14px);
+}
+
+/* Player bar buttons: slightly larger hit targets, calmer chrome. */
+.videoPlayerBar .iconBtn{
+  width:36px;
+  height:36px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,0.12);
+  background:rgba(255,255,255,0.04);
+  display:grid;
+  place-items:center;
+}
+.videoPlayerBar .iconBtn:hover{ background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.16); }
+.videoPlayerBar .iconBtn:focus-visible{
+  outline:none;
+  border-color: rgba(220, 185, 120, 0.75);
+  box-shadow: 0 0 0 3px rgba(220, 185, 120, 0.18);
+}
+
+.videoNowTitle{
+  font-size:13px;
+  opacity:0.92;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width: min(760px, calc(100vw - 420px));
+}
+.videoEl{ width:100%; height:100%; flex:1; min-height:0; border-radius:16px; background:black; object-fit:contain; }
+
+/* Build 38 — Stable player chrome for embedded libmpv:
+   Keep controls OUTSIDE the native video surface (no overlay), so clicks/focus are predictable.
+   We keep the same DOM, but make the stage a column: [video surface] + [control strip]. */
+.mpvHost{
+  position:relative;
+  inset:auto;
+  width:100%;
+  height:auto;
+  flex:1;
+  min-height:0;
+  border-radius:16px;
+  background:black;
+  pointer-events:none;
+  z-index:0;
+}
+
+/* Build 66: libmpv canvas embedded mode renders into a DOM canvas/WebGL surface.
+   Make the entire render surface non-interactive so the stage can reliably receive
+   right-click/mousewheel/mousemove (context menu + minimal HUD reveal zone). */
+body.libmpvCanvas .mpvHost *{ pointer-events:none !important; }
+
+.mpvDetachedPlaceholder{ width:100%; height:100%; border-radius:16px; border:1px dashed rgba(255,255,255,0.18); background:rgba(255,255,255,0.03); display:flex; align-items:center; justify-content:center; text-align:center; padding:16px; font-size:13px; opacity:0.85; }
+.mpvDetachedPlaceholder.hidden{ display:none; }
+body.mpvEngine .mpvDetachedPlaceholder{ flex:1; height:auto; }
+
+.videoPlayerBarRight{ margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+/* Chip buttons — smaller, darker, "brass" hover; consistent focus ring. */
+.chipBtn{
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.14);
+  background:rgba(255,255,255,0.04);
+  color:inherit;
+  cursor:pointer;
+  font-size:12px;
+  line-height:1;
+  opacity:0.92;
+}
+.chipBtn:hover{
+  background:rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.18);
+}
+.chipBtn:active{ transform: translateY(0.5px); }
+.chipBtn:focus-visible{
+  outline: none;
+  border-color: rgba(220, 185, 120, 0.65);
+  box-shadow: 0 0 0 3px rgba(220, 185, 120, 0.18);
+}
+
+.videoStage{
+  position:relative;
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:flex-start;
+  gap:0px;
+}
+
+/* Subtle readability gradient behind the bottom HUD (no click interference). */
+.videoStage::after{
+  content:'';
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  height:64px;
+  background: linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0.0));
+  opacity:0;
+  pointer-events:none;
+  transition: opacity 160ms ease;
+  z-index:4; /* below HUD (5), above video */
+}
+.videoStage.showHud::after{ opacity:1; }
+
+/* Build 56B: fullscreen polish — hide cursor when controls fade (YouTube-like). */
+.videoStage.hideCursor{ cursor:none; }
+.videoStage.hideCursor *{ cursor:none; }
+body.inVideoPlayer .videoStage{ height:calc(100vh - 120px); }
+
+/* Build 52 — Canvas-only overlay HUD (VLC-ish). Hidden until mouse/keyboard activity. */
+/* BUILD 66: Minimal timeline (ultra-thin, cinema mode) */
+.videoHud--minimal{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:40px;
+  z-index:5;
+  padding:10px 12px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  border-radius:0;
+  background:transparent;
+  border:none;
+  box-shadow:none;
+  opacity:0;
+  transform:translateY(4px);
+  pointer-events:none;
+  transition:opacity 160ms ease, transform 160ms ease;
+  backdrop-filter:none;
+  height:52px; /* Still compact, but not fiddly */
+}
+
+.videoStage.showHud .videoHud--minimal{
+  opacity:1;
+  transform:none;
+  pointer-events:auto;
+}
+
+/* BUILD 101: Fullscreen exit arrow (top-left, unobtrusive). */
+#videoExitFullscreenBtn{
+  position:absolute;
+  top:10px;
+  left:10px;
+  z-index:6; /* Above video, below menus */
+  width:28px;
+  height:28px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.18);
+  background:rgba(0,0,0,0.18);
+  color:rgba(255,255,255,0.88);
+  font-size:16px;
+  line-height:1;
+  display:grid;
+  place-items:center;
+  opacity:0;
+  pointer-events:none;
+  cursor:pointer;
+  transition:opacity 140ms ease, background 140ms ease;
+  backdrop-filter: blur(4px);
+}
+
+body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn{
+  opacity:0.55;
+  pointer-events:auto;
+}
+
+body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn:hover,
+body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn:focus-visible{
+  opacity:0.9;
+  background:rgba(0,0,0,0.28);
+}
+
+/* Minimal play button at far left */
+.minimalNavBtn{
+  width:38px;
+  height:38px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.18);
+  background:rgba(0,0,0,0.28);
+  color:inherit;
+  display:grid;
+  place-items:center;
+  margin-right:0;
+  backdrop-filter: blur(6px);
+}
+.minimalNavBtn:hover{ background:rgba(255,255,255,0.08); }
+.minimalNavBtn:focus-visible{
+  outline:none;
+  border-color: rgba(220, 185, 120, 0.65);
+  box-shadow: 0 0 0 3px rgba(220, 185, 120, 0.18);
+}
+
+/* Make the primary play button feel "centered" and easier to hit. */
+.minimalPlayBtn{
+  width:44px;
+  height:44px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.20);
+  background:rgba(12,12,14,0.62);
+  color:inherit;
+  display:grid;
+  place-items:center;
+  font-size:16px;
+  backdrop-filter: blur(8px);
+}
+.minimalPlayBtn:hover{ background:rgba(255,255,255,0.08); }
+.minimalPlayBtn:active{ transform: translateY(0.5px); }
+.minimalPlayBtn:focus-visible{
+  outline:none;
+  border-color: rgba(220, 185, 120, 0.75);
+  box-shadow: 0 0 0 3px rgba(220, 185, 120, 0.18);
+}
+
+/* Scrub control: thicker on hover, clearer thumb, readable bubble. */
+.videoScrub--minimal{
+  height:12px;
+  align-self:center;
+  padding:0;
+}
+.videoHud--minimal:hover .videoScrub--minimal{ height:14px; }
+.videoScrub--minimal .scrubTrack{
+  height:4px;
+  border-radius:999px;
+  background:rgba(255,255,255,0.14);
+}
+.videoHud--minimal:hover .videoScrub--minimal .scrubTrack{ height:5px; }
+.videoScrub--minimal .scrubFill{
+  height:4px;
+  border-radius:999px;
+  background:rgba(220, 185, 120, 0.70);
+}
+.videoHud--minimal:hover .videoScrub--minimal .scrubFill{ height:5px; }
+.videoScrub--minimal .scrubThumb{
+  width:14px;
+  height:14px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.24);
+  background:rgba(10,10,12,0.92);
+}
+.videoHud--minimal:hover .videoScrub--minimal .scrubThumb{
+  width:16px;
+  height:16px;
+}
+.videoScrub--minimal .scrubBubble{
+  border-radius:12px;
+  padding:5px 8px;
+  border:1px solid rgba(255,255,255,0.16);
+  background:rgba(10,10,12,0.82);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.45);
+}
+
+/* Time display: calmer, more "player-like". */
+.videoTimeDisplay{
+  font-size:12px;
+  opacity:0.90;
+  padding:4px 8px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.14);
+  background:rgba(0,0,0,0.22);
+  backdrop-filter: blur(6px);
+}
+.minimalNavBtn:disabled{ opacity:0.4; cursor:not-allowed; }
+
+
+
+/* Legacy videoHud for non-minimal mode (keep original for compatibility) */
+.videoHud:not(.videoHud--minimal){
+  position:absolute;
+  left:12px;
+  right:12px;
+  bottom:12px;
+  z-index:5;
+  padding:10px 12px 12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  border-radius:16px;
+  background:rgba(var(--panel2-rgb), 0.72);
+  border:1px solid rgba(255,255,255,0.16);
+  box-shadow: var(--shadow2);
+  opacity:0;
+  transform: translateY(8px);
+  pointer-events:none;
+  transition: opacity 160ms ease, transform 160ms ease;
+  backdrop-filter: blur(6px);
+}
+
+.videoStage.showHud .videoHud:not(.videoHud--minimal){ opacity:1; transform:none; pointer-events:auto; }
+
+/* Non-canvas mpv surfaces: keep HUD docked and always visible (safety). */
+body.mpvEngine:not(.libmpvCanvas) .videoStage{ gap:10px; }
+body.mpvEngine:not(.libmpvCanvas) .mpvHost{ flex:1; }
+body.mpvEngine:not(.libmpvCanvas) .videoHud{
+  position:relative;
+  left:auto;
+  right:auto;
+  bottom:auto;
+  opacity:1;
+  transform:none;
+  pointer-events:auto;
+  backdrop-filter:none;
+  margin-top:10px;
+}
+body.mpvEngine:not(.libmpvCanvas) .videoStage.showHud .videoHud{ opacity:1; transform:none; pointer-events:auto; }
+body.mpvEngine:not(.libmpvCanvas) .videoToast{ position:relative; top:auto; left:auto; transform:none; margin:0 auto; }
+body.mpvEngine:not(.libmpvCanvas) .videoPrompt{ position:relative; inset:auto; background:transparent; padding:10px 0; }
+
+/* Video context menu (Build 56C) */
+.videoCtxMenu{
+  position:fixed;
+  z-index:80;
+  min-width:220px;
+  max-width:320px;
+  padding:6px;
+  border-radius:14px;
+  background:rgba(20,20,24,0.94);
+  border:1px solid rgba(255,255,255,0.10);
+  box-shadow:0 18px 60px rgba(0,0,0,0.55);
+  backdrop-filter:blur(16px);
+}
+.videoCtxMenu.hidden{ display:none; }
+.videoCtxMenu .ctxItem{
+  width:100%;
+  border:0;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  text-align:left;
+  padding:10px 12px;
+  border-radius:12px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+.videoCtxMenu .ctxItem:hover{ background:rgba(255,255,255,0.08); }
+.videoCtxMenu .ctxItem:disabled{
+  opacity:0.4;
+  cursor:not-allowed;
+}
+.videoCtxMenu .ctxItem:disabled:hover{
+  background:transparent;
+}
+.videoCtxMenu .ctxSep{
+  height:1px;
+  margin:6px 6px;
+  background:rgba(255,255,255,0.12);
+  border-radius:1px;
+}
+
+/* BUILD64: Context menu enhancements */
+.videoCtxMenu .ctxLabel{
+  flex:1;
+}
+.videoCtxMenu .ctxHotkey{
+  opacity:0.5;
+  font-size:0.9em;
+  font-family:monospace;
+}
+.videoCtxMenu .ctxArrow{
+  opacity:0.6;
+  font-size:0.85em;
+}
+.videoCtxMenu .ctxCheck{
+  opacity:0.8;
+  display:none;
+}
+.videoCtxMenu .ctxCheck.visible{
+  display:inline;
+}
+
+/* Submenu container */
+.videoCtxMenu .ctxSubmenu{
+  position:relative;
+}
+
+/* Submenu panel */
+.videoCtxMenu .ctxSubmenuPanel{
+  position:fixed;
+  z-index:81;
+  min-width:200px;
+  max-width:280px;
+  padding:6px;
+  border-radius:14px;
+  background:rgba(20,20,24,0.94);
+  border:1px solid rgba(255,255,255,0.10);
+  box-shadow:0 18px 60px rgba(0,0,0,0.55);
+  backdrop-filter:blur(16px);
+}
+.videoCtxMenu .ctxSubmenuPanel.hidden{
+  display:none;
+}
+
+/* Active submenu item highlighting */
+.videoCtxMenu .ctxItem[data-act="speed"].active,
+.videoCtxMenu .ctxItem[data-track-id].active{
+  background:rgba(255,255,255,0.15);
+  font-weight:500;
+}
+.videoCtxMenu .ctxItem[data-act="speed"].active::after,
+.videoCtxMenu .ctxItem[data-track-id].active::after{
+  content:'✓';
+  margin-left:8px;
+  opacity:0.8;
+}
+
+body.mpvEngine:not(.libmpvCanvas) .videoPromptCard{ margin:0 auto; }
+
+/* Build 33: Reader-style hide UI toggle for video player (H) */
+body.videoUiHidden .videoPlayerBar,
+body.videoUiHidden .videoHud,
+body.videoUiHidden #videoTracksPanel,
+body.videoUiHidden #videoVolPanel,
+body.videoUiHidden #videoSpeedPanel,
+body.videoUiHidden #videoPlaylistPanel,
+body.videoUiHidden .videoToast{
+  display: none !important;
+}
+.videoHudRow{ display:flex; align-items:center; gap:8px; }
+.hudBtn{ padding:6px 8px; border-radius:10px; border:1px solid rgba(255,255,255,0.16); background:rgba(255,255,255,0.08); color:inherit; cursor:pointer; font-size:12px; }
+.hudBtnWide{ padding:6px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.16); background:rgba(255,255,255,0.08); color:inherit; cursor:pointer; font-size:12px; }
+.hudBtn:hover, .hudBtnWide:hover{ background:rgba(255,255,255,0.12); }
+.hudBtn:disabled, .hudBtnWide:disabled{ opacity:0.5; cursor:default; }
+.hudTime{ font-size:12px; opacity:0.85; min-width:52px; text-align:center; }
+.hudSeek{ flex:1; }
+
+/* Video timeline uses the reader scrub control */
+.videoHud .videoScrub{ flex:1; min-width:160px; }
+
+.hudVol{ width:120px; }
+.hudSpacer{ flex:1; }
+
+.videoToast{ position:absolute; top:12px; left:50%; transform:translateX(-50%); padding:6px 10px; border-radius:999px; background:rgba(0,0,0,0.65); border:1px solid rgba(255,255,255,0.18); font-size:12px; opacity:0.95; }
+.videoToast.hidden{ display:none; }
+.videoLibraryToast{
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12000;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.78);
+  border: 1px solid rgba(255,255,255,0.20);
+  color: #fff;
+  font-size: 12px;
+  pointer-events: none;
+  opacity: 0.96;
+}
+.videoLibraryToast.hidden{ display:none; }
+
+/* Tankoban Plus Build 5.4A — Track selectors (mpv only)
+   INTENT: Minimal in-app selectors for audio/subtitle tracks without changing overlay behavior. */
+.videoTracksPanel{ position:absolute; left:0; right:0; bottom:64px; display:flex; align-items:flex-end; justify-content:center; padding:0 10px; pointer-events:none; z-index:30; }
+.videoTracksPanel.hidden{ display:none; }
+.videoTracksCard{ width:min(520px, calc(100% - 24px)); border-radius:16px; background:rgba(20,20,20,0.95); border:1px solid rgba(255,255,255,0.14); box-shadow:0 12px 40px rgba(0,0,0,0.5); pointer-events:auto; }
+.videoTracksHeader{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.10); }
+.videoTracksTitle{ font-size:13px; opacity:0.92; }
+.videoTracksBody{ display:grid; grid-template-columns: 90px 1fr; gap:10px; padding:12px; align-items:center; }
+.tracksLabel{ font-size:12px; opacity:0.8; }
+.tracksSelect{ width:100%; padding:8px 10px; border-radius:12px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); color:inherit; }
+.tracksSelect option{ background:#111; color:#f2f2f2; }
+
+
+.tracksDivider{ grid-column:1 / -1; height:1px; background:rgba(255,255,255,0.08); margin:2px 0; }
+.tracksToggle{ grid-column:2 / -1; display:flex; align-items:center; gap:10px; font-size:12px; opacity:0.9; user-select:none; }
+.tracksToggle input{ accent-color: #4aa3ff; }
+.tracksHint{ grid-column:2 / -1; font-size:11px; opacity:0.65; margin-top:-6px; }
+
+/* Tankoban Plus Build 5.4B — Delay controls (mpv only)
+   INTENT: Quick sync nudges with a tiny, consistent control group. */
+.delayControls{ display:flex; align-items:center; justify-content:flex-start; gap:10px; }
+.delayControls.hidden{ display:none; }
+.delayBtn{ min-width:34px; height:32px; border-radius:12px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); color:inherit; cursor:pointer; }
+.delayBtn:hover{ background:rgba(255,255,255,0.12); }
+.delayValue{ font-size:12px; opacity:0.9; min-width:60px; text-align:center; }
+
+
+/* Tankoban Plus Build 5.4C — Basic video transforms (mpv only)
+   INTENT: Aspect/crop presets + reset, kept inside the existing tracks panel. */
+.transformsBlock{ display:contents; }
+.transformsBlock.hidden{ display:none; }
+.tracksBtn{ width:100%; height:32px; border-radius:12px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); color:inherit; cursor:pointer; }
+.tracksBtn:hover{ background:rgba(255,255,255,0.12); }
+
+/* In mpv mode, the HUD is docked below the surface; keep the panel docked too. */
+/* Dock the tracks panel only for native/embedded mpv surfaces (where overlays can be occluded). */
+body.mpvEngine:not(.libmpvCanvas) .videoTracksPanel{ position:relative; left:auto; right:auto; bottom:auto; padding:0; }
+
+.videoPrompt{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.45); }
+.videoPrompt.hidden{ display:none; }
+.videoPromptCard{ width:min(420px, calc(100% - 24px)); padding:14px; border-radius:16px; background:rgba(20,20,20,0.95); border:1px solid rgba(255,255,255,0.14); box-shadow:0 12px 40px rgba(0,0,0,0.5); }
+.videoPromptTitle{ font-size:14px; margin-bottom:6px; }
+.videoPromptText{ font-size:12px; opacity:0.85; margin-bottom:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.videoPromptActions{ display:flex; gap:10px; justify-content:flex-end; }
+.primaryBtn{ padding:8px 12px; border-radius:12px; border:1px solid rgba(255,255,255,0.18); background:rgba(255,255,255,0.14); color:inherit; cursor:pointer; }
+.primaryBtn:hover{ background:rgba(255,255,255,0.18); }
+
+/* Build 45 — Videos: stabilize Continue Watching shelf geometry (break layout feedback loop). */
+#videoContinuePanel{
+  height: 430px;
+  display:flex;
+  flex-direction:row;
+}
+
+/* Build 20 — Videos: Continue Watching shelf uses the same tile language as Continue Reading (one tile per show). */
+.videoContinueRow{ display:flex; gap:18px; overflow-x:auto; overflow-y:hidden; padding:20px 6px; flex:1; min-height:0; }
+.videoContinueRow .contTile{ flex:0 0 auto; }
+.contTileSub{ margin-top:4px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:0.8; }
+
+/* TankobanPlus Build 23 — Videos: drag-and-drop image files onto show tiles to set posters. */
+.seriesCard.posterDropTarget .seriesCoverWrap{ outline:2px dashed var(--accent); outline-offset:4px; }
+.contTile.posterDropTarget .contCover{ outline:2px dashed var(--accent); outline-offset:4px; }
+
+
+/* Video Player Shell mode (dedicated controller window) */
+body.videoShellMode .topbar { display: none !important; }
+body.videoShellMode .videoPlayerShell { height: 100vh !important; }
+
+
+
+/* Playlist panel: compact reader-like overlay */
+.hudPanel {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 64px;
+  background: rgba(18, 18, 18, 0.92);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 16px;
+  box-shadow: 0 14px 44px rgba(0,0,0,0.55);
+  overflow: hidden;
+  z-index: 31;
+  pointer-events: auto;
+}
+
+/* In embedded/native mpv surfaces, overlays can be occluded; dock panels instead.
+   In canvas mode, keep them as true overlays (VLC-ish). */
+body.mpvEngine:not(.libmpvCanvas) .hudPanel {
+  position: relative;
+  left: auto;
+  transform: none;
+  bottom: auto;
+  margin: 0 auto;
+}
+
+#videoPlaylistPanel { width: min(520px, calc(100vw - 24px)); max-height: min(520px, calc(100vh - 24px)); }
+#videoPlaylistPanel .panelHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.10); }
+#videoPlaylistPanel .panelTitle { font-weight: 700; }
+#videoPlaylistPanel .panelHeaderActions { display: flex; align-items: center; gap: 10px; }
+#videoPlaylistPanel .panelBody { overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 12px; min-height: 0; }
+#videoPlaylistList { flex: 1 1 auto; overflow: auto; padding-right: 4px; min-height: 0; overscroll-behavior: contain; }
+
+.videoPlaylistItem { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.videoPlaylistItem:hover { filter: brightness(1.08); }
+.videoPlaylistItem.isCurrent { outline: 1px solid rgba(255,255,255,0.18); }
+
+.videoPlaylistItem .epName { flex: 1; }
+.videoPlaylistItem .epMeta { opacity: 0.75; font-size: 12px; }
+
+.panelToggle { display: inline-flex; align-items: center; gap: 8px; user-select: none; }
+.panelRow { display: flex; gap: 10px; }
+.panelBtn {
+  flex: 1;
+  height: 32px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  cursor: pointer;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.panelBtn:hover { filter: brightness(1.08); }
+.panelBtn:disabled { opacity: 0.5; cursor: default; filter: none; }
+
+.panelSub { opacity: 0.75; font-size: 12px; margin-top: 2px; }
+
+
+
+/* Build 24 — Video HUD quick tools: mini panels */
+
+/* Volume panel layout */
+.videoVolBody{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:12px;
+}
+.videoVolPanelSlider{ width: 220px; max-width: 50vw; }
+#videoVolPct{ min-width: 56px; text-align: right; opacity:0.85; }
+
+/* Speed panel layout */
+.videoSpeedBody{ padding:12px; display:flex; flex-direction:column; gap:12px; }
+.videoSpeedRow{ display:flex; align-items:center; justify-content:center; gap:12px; }
+#videoSpeedPanelValue{ min-width: 64px; text-align:center; opacity:0.9; }
+
+.videoSpeedPresets{ display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+.speedChip{
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.16);
+  background:rgba(255,255,255,0.08);
+  color:inherit;
+  cursor:pointer;
+  font-size:12px;
+}
+.speedChip:hover{ background:rgba(255,255,255,0.12); }
+
+/* =========================================================
+   UX FIX: Overlays (toast + center flash) must not shrink video
+   Keep the control bar behavior unchanged.
+   Root cause: #videoStage/.videoStage is a flex column. Any
+   transient UI in normal flow will steal height and “shrink”
+   the video surface. Force the key transient elements to be
+   absolute overlays so they never participate in layout.
+   ========================================================= */
+
+#videoStage, .videoStage {
+  position: relative;
+}
+
+/* Toasts: volume/speed/key feedback */
+#videoStage #videoToast,
+#videoStage .videoToast,
+body.mpvEngine #videoStage #videoToast,
+body.mpvEngine #videoStage .videoToast,
+body.mpvEngine .videoToast {
+  position: absolute !important;
+  right: 18px !important;
+  bottom: 26px !important;
+  top: auto !important;
+  left: auto !important;
+  transform: none !important;
+  margin: 0 !important;
+  pointer-events: none !important;
+  z-index: 999 !important;
+}
+
+/* Center play/pause flash: ensure it never becomes a full-width “bar” */
+#videoStage #videoCenterFlash,
+#videoStage .videoCenterFlash,
+.videoCenterFlash {
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: auto !important;
+  height: auto !important;
+  background: transparent !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: none !important;
+  z-index: 1000 !important;
+}
+
+/* =========================================================
+   BUILD 69: Volume OSD Indicator
+   Prominent on-screen display for volume changes
+   ========================================================= */
+.videoVolumeOSD {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  padding: 20px 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  z-index: 10000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.videoVolumeOSD.visible {
+  opacity: 1;
+}
+
+.videoVolumeOSD.hidden {
+  display: none;
+}
+
+.volumeOSDIcon {
+  font-size: 48px;
+  line-height: 1;
+}
+
+.volumeOSDBars {
+  font-family: monospace;
+  font-size: 18px;
+  letter-spacing: 2px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.volumeOSDPercent {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* =========================================================
+   BUILD 69: Always-visible time display on timeline
+   ========================================================= */
+.videoTimeDisplay {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  padding: 0 12px;
+  user-select: none;
+}
+
+.videoHud--minimal .videoTimeDisplay {
+  font-size: 12px;
+  padding: 0 8px;
+}
