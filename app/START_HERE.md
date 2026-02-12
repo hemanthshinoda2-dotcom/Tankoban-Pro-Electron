@@ -78,3 +78,5 @@ Canonical setup requirements live in the repository root README.
 This repository line targets Windows only.
 
 Quick run (Windows): run `install_and_run.bat` in the repository root.
+
+Release gate: before publishing, run `../RELEASE_CHECKLIST.md` end-to-end and require a full PASS.

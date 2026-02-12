@@ -30,6 +30,20 @@ Notes:
 - The `python-mpv` package needs access to mpv dynamic libraries.
 - The Electron launcher sets `TANKOBAN_MPV_DLL_DIR` when it has a bundled mpv folder available.
 
+## Maintainer build contract
+
+Use `build_player.bat` for release builds. It now performs:
+
+1. Preflight checks for Python launcher availability and Python version (3.10+).
+2. Tooling checks for `pip` and `pyinstaller` inside `.venv_build`.
+3. PyInstaller `--onedir` build.
+4. Post-build artifact validation for:
+   - `dist\TankobanPlayer\TankobanPlayer.exe`
+   - `dist\TankobanPlayer\_internal\*.dll`
+   - `dist\TankobanPlayer\_internal\*.pyd`
+
+If any required artifact is missing, the script fails fast with an explicit error message.
+
 ## How the player is launched
 
 The main process builds a command like this (example):
