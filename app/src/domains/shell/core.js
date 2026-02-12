@@ -2090,6 +2090,13 @@ async function clearSeriesSettings(seriesId) {
       seriesBooksSortedBySeriesId.set(sid, list);
       if (list[0]) seriesCoverBookBySeriesId.set(sid, list[0]);
     }
+
+    try {
+      const rebuild = window.libraryHooks && typeof window.libraryHooks.rebuildSearchIndex === 'function'
+        ? window.libraryHooks.rebuildSearchIndex
+        : null;
+      if (rebuild) rebuild();
+    } catch {}
   }
 
   // Modifier keys (for the "gas pedal" throttle)
