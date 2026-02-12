@@ -809,28 +809,13 @@ COMMON ANCHORS
 <script src="./services/health/monitor.js"></script>
   <!-- BUILD 88 FIX 3.2: Health check monitoring -->
 
-  <!-- Phase 7: State + domain runtime (modules below are compat shims; order preserved) -->
+  <!-- Phase 7: State + minimal bootstrap runtime -->
   <script src="./state/bootstrap.js"></script>
+  <script src="./state/deferred_modules.js"></script>
 
   <script src="./domains/shell/core.js"></script>
   <script src="./domains/library/library.js"></script>
-  <!-- QT_ONLY: Embedded/canvas player adapter has been removed. Videos launch the external Qt player. -->
-  <script src="./domains/video/video_utils.js"></script>
-  <script src="./domains/video/build14_state.js"></script>
-  <script src="./domains/video/video.js"></script>
-  <script src="./domains/shell/shell_bindings.js"></script>
-  <script src="./domains/reader/open.js"></script>
-  <script src="./domains/reader/bitmaps.js"></script>
   <script src="./state/reader.js"></script>
-  <script src="./domains/reader/render_portrait.js"></script>
-  <script src="./domains/reader/render_two_page.js"></script>
-  <script src="./domains/reader/render_core.js"></script>
-  <script src="./domains/reader/state_machine.js"></script>
-  <script src="./domains/reader/hud_core.js"></script>
-  <script src="./domains/reader/mega_settings.js"></script>
-  <script src="./domains/reader/volume_nav_overlay.js"></script>
-  <script src="./domains/reader/input_pointer.js"></script>
-  <script src="./domains/reader/input_keyboard.js"></script>
-  <script src="./domains/reader/boot.js"></script>
+  <script src="./domains/shell/shell_bindings.js"></script>
 </body>
 </html>
