@@ -229,6 +229,7 @@ echo.
 
 REM Run the build
 echo [6/6] Building Windows packages...
+echo [build] Using npm run dist ^(release:prep -> build:player -> validate:player -> electron-builder^)
 echo This may take several minutes. Please wait...
 echo.
 

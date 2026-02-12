@@ -8,16 +8,18 @@
     "prestart": "..\\scripts\\windows\\ensure_mpv_windows.bat",
     "start": "electron .",
     "predist": "..\\scripts\\windows\\ensure_mpv_windows.bat",
-    "dist": "npm run build:player && electron-builder",
-    "dist:with-static-media": "npm run build:player && electron-builder --config.extraMetadata.buildProfile=with-static-media --config.asarUnpack[0]=node_modules/node-unrar-js/** --config.asarUnpack[1]=node_modules/ffmpeg-static/** --config.asarUnpack[2]=node_modules/ffprobe-static/**",
+    "dist": "npm run release:prep && electron-builder",
+    "dist:with-static-media": "npm run release:prep && electron-builder --config.extraMetadata.buildProfile=with-static-media --config.asarUnpack[0]=node_modules/node-unrar-js/** --config.asarUnpack[1]=node_modules/ffmpeg-static/** --config.asarUnpack[2]=node_modules/ffprobe-static/**",
     "prepack": "..\\scripts\\windows\\ensure_mpv_windows.bat",
-    "pack": "npm run build:player && electron-builder --dir",
+    "pack": "npm run release:prep && electron-builder --dir",
     "pack:folder": "electron-packager . \"Tankoban\" --platform=win32 --arch=x64 --out=dist --overwrite --asar --asar.unpackDir=\"resources/mpv\" --icon=build/icon.ico",
     "zip:folder": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"if(Test-Path dist\\\\Tankoban-win32-x64.zip){Remove-Item dist\\\\Tankoban-win32-x64.zip -Force}; Compress-Archive -Path 'dist\\\\Tankoban-win32-x64\\\\*' -DestinationPath 'dist\\\\Tankoban-win32-x64.zip'\"",
     "doctor": "node tools/doctor.js",
     "map": "node tools/repo_map.js",
     "smoke": "node tools/smoke_check.js",
-    "build:player": "cd player_qt && build_player.bat"
+    "build:player": "cd player_qt && build_player.bat",
+    "validate:player": "node tools/validate_player_artifacts.js",
+    "release:prep": "npm run build:player && npm run validate:player"
   },
   "devDependencies": {
     "electron": "30.0.0",
