@@ -9478,6 +9478,9 @@ function bindKeyboard(){
   }
   // Expose a tiny bridge so the existing top bar Refresh button can work in video mode.
   window.videoApp = {
+    setMode: (mode) => {
+      safe(() => setMode(mode));
+    },
     refresh: () => {
       if (state.mode === 'videos') safe(() => Tanko.api.video.scan({ force: true }));
     },
@@ -9509,6 +9512,11 @@ function bindKeyboard(){
     setAllProgress: (p) => {
       if (state.mode === 'videos') safe(() => setAllVideoProgress(p));
     },
+  };
+
+  // Deferred mode loader expects a global setMode bridge.
+  window.setMode = (mode) => {
+    safe(() => setMode(mode));
   };
 
   try { bindModeButtons(); } catch {}
