@@ -844,6 +844,12 @@ function getThumbWarmupMode(){
     if (e.target === el.keysOverlay) toggleKeysOverlay(false);
   });
 
+  // Manga library tips overlay
+  el.mangaLibTipsClose?.addEventListener('click', () => toggleMangaLibTipsOverlay(false));
+  el.mangaLibTipsOverlay?.addEventListener('click', (e) => {
+    if (e.target === el.mangaLibTipsOverlay) toggleMangaLibTipsOverlay(false);
+  });
+
   // Build 8: quick settings row
   el.quickSpeedBtn?.addEventListener('click', (e) => {
     e.preventDefault();

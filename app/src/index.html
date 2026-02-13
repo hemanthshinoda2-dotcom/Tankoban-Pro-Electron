@@ -193,6 +193,50 @@ COMMON ANCHORS
             </div>
           </div>
         </div>
+
+        <!-- Manga library tips overlay (K to toggle) -->
+        <div id="mangaLibTipsOverlay" class="keysOverlay hidden" role="dialog" aria-modal="true">
+          <div class="keysCard">
+            <div class="keysTop">
+              <div class="keysTitle">Tips</div>
+              <button id="mangaLibTipsClose" class="btn btn-ghost btn-sm">Close</button>
+            </div>
+
+            <div class="keysCols">
+              <div class="keysCol">
+                <div class="keysHead">Library</div>
+                <div class="keysLine"><span class="key">Right-click</span><span class="desc">Actions on any tile or row</span></div>
+                <div class="keysLine"><span class="key">Right-click</span><span class="desc">Mark finished / in-progress</span></div>
+                <div class="keysLine"><span class="key">Right-click</span><span class="desc">Open volume in new window</span></div>
+                <div class="keysLine"><span class="key">Right-click</span><span class="desc">Clear from Continue Reading</span></div>
+                <div class="keysLine"><span class="key">Sort dropdown</span><span class="desc">Sort by numerical, alpha, newest, last read</span></div>
+                <div class="keysLine"><span class="key">Toggle</span><span class="desc">Hide finished volumes</span></div>
+                <div class="keysLine"><span class="key">Toolbar</span><span class="desc">Tile density control</span></div>
+                <div class="keysLine"><span class="key">Sidebar</span><span class="desc">Restore hidden series</span></div>
+                <div class="keysLine"><span class="key">Right-click sidebar</span><span class="desc">Rescan series for new volumes</span></div>
+                <div class="keysLine"><span class="key">Right-click row</span><span class="desc">Copy volume path</span></div>
+                <div class="keysLine"><span class="key">Arrows / Enter</span><span class="desc">Keyboard-navigate volume list</span></div>
+              </div>
+
+              <div class="keysCol">
+                <div class="keysHead">Keys</div>
+                <div class="keysLine"><span class="key">A</span><span class="desc">Add series folder</span></div>
+                <div class="keysLine"><span class="key">Backspace</span><span class="desc">Back / clear selection</span></div>
+                <div class="keysLine"><span class="key">F</span><span class="desc">Toggle fullscreen</span></div>
+                <div class="keysLine"><span class="key">F11</span><span class="desc">Toggle fullscreen</span></div>
+                <div class="keysLine"><span class="key">Control + R</span><span class="desc">Refresh library</span></div>
+                <div class="keysLine"><span class="key">Control + 0</span><span class="desc">Reset to defaults</span></div>
+                <div class="keysLine"><span class="key">Control + M</span><span class="desc">Minimize</span></div>
+                <div class="keysLine"><span class="key">Control + Q</span><span class="desc">Quit</span></div>
+                <div class="keysLine"><span class="key">K</span><span class="desc">Show or hide this overlay</span></div>
+                <div class="keysLine"><span class="key">Escape</span><span class="desc">Close overlay</span></div>
+              </div>
+            </div>
+
+            <div class="keysHint muted tiny">Press K again or Escape to close.</div>
+          </div>
+        </div>
+
       </section>
 
             <!-- Video library view (Build 97) -->
@@ -681,48 +725,6 @@ COMMON ANCHORS
 
           </div>
 
-          <!-- Video player keys overlay (K to toggle) -->
-          <div id="videoKeysOverlay" class="keysOverlay hidden" role="dialog" aria-modal="true">
-            <div class="keysCard">
-              <div class="keysTop">
-                <div class="keysTitle">Keys</div>
-                <button id="videoKeysClose" class="btn btn-ghost btn-sm">Close</button>
-              </div>
-
-              <div class="keysCols">
-                <div class="keysCol">
-                  <div class="keysHead">Playback</div>
-                  <div class="keysLine"><span class="key">Space</span><span class="desc">Play / Pause</span></div>
-                  <div class="keysLine"><span class="key">Left / Right</span><span class="desc">Seek backward / forward</span></div>
-                  <div class="keysLine"><span class="key">Ctrl + Left / Right</span><span class="desc">Seek backward / forward (large)</span></div>
-                  <div class="keysLine"><span class="key">J / L</span><span class="desc">Seek back / forward 10s</span></div>
-                  <div class="keysLine"><span class="key">G</span><span class="desc">Go to time</span></div>
-                  <div class="keysLine"><span class="key">Up / Down</span><span class="desc">Volume up / down 5%</span></div>
-                  <div class="keysLine"><span class="key">M</span><span class="desc">Toggle mute</span></div>
-                  <div class="keysLine"><span class="key">C or ]</span><span class="desc">Increase speed</span></div>
-                  <div class="keysLine"><span class="key">X or [</span><span class="desc">Decrease speed</span></div>
-                  <div class="keysLine"><span class="key">Z or \</span><span class="desc">Reset speed to 1.0×</span></div>
-                </div>
-
-                <div class="keysCol">
-                  <div class="keysHead">Navigation &amp; Tracks</div>
-                  <div class="keysLine"><span class="key">N / P</span><span class="desc">Next / previous episode</span></div>
-                  <div class="keysLine"><span class="key">A</span><span class="desc">Cycle audio track</span></div>
-                  <div class="keysLine"><span class="key">S</span><span class="desc">Cycle subtitle track</span></div>
-                  <div class="keysLine"><span class="key">Alt + H</span><span class="desc">Toggle subtitles on / off</span></div>
-                  <div class="keysLine"><span class="key">&gt; / &lt;</span><span class="desc">Subtitle delay +/−</span></div>
-                  <div class="keysLine"><span class="key">/</span><span class="desc">Reset subtitle delay</span></div>
-                  <div class="keysLine"><span class="key">F or Enter</span><span class="desc">Toggle fullscreen</span></div>
-                  <div class="keysLine"><span class="key">K</span><span class="desc">Show or hide this overlay</span></div>
-                  <div class="keysLine"><span class="key">Backspace</span><span class="desc">Back to library</span></div>
-                  <div class="keysLine"><span class="key">Escape</span><span class="desc">Exit fullscreen / close panels</span></div>
-                </div>
-              </div>
-
-              <div class="keysHint muted tiny">Press K again or Escape to close.</div>
-            </div>
-          </div>
-
         </div>
       </section>
 
@@ -883,19 +885,6 @@ COMMON ANCHORS
             <div class="keysLine"><span class="key">Control + Q</span><span class="desc">Quit</span></div>
             <div class="keysLine"><span class="key">K</span><span class="desc">Show or hide this overlay</span></div>
             <div class="keysLine"><span class="key">Escape</span><span class="desc">Close overlay (when open)</span></div>
-
-            <div class="keysHead" style="margin-top:14px">Tips</div>
-            <div class="keysLine"><span class="key">Right-click</span><span class="desc">Actions on any tile or row</span></div>
-            <div class="keysLine"><span class="key">Right-click</span><span class="desc">Mark finished / in-progress</span></div>
-            <div class="keysLine"><span class="key">Right-click</span><span class="desc">Open volume in new window</span></div>
-            <div class="keysLine"><span class="key">Right-click</span><span class="desc">Clear from Continue Reading</span></div>
-            <div class="keysLine"><span class="key">Sort dropdown</span><span class="desc">Sort by numerical, alpha, newest, last read</span></div>
-            <div class="keysLine"><span class="key">Toggle</span><span class="desc">Hide finished volumes</span></div>
-            <div class="keysLine"><span class="key">Toolbar</span><span class="desc">Tile density control</span></div>
-            <div class="keysLine"><span class="key">Sidebar</span><span class="desc">Restore hidden series</span></div>
-            <div class="keysLine"><span class="key">Right-click sidebar</span><span class="desc">Rescan series for new volumes</span></div>
-            <div class="keysLine"><span class="key">Right-click row</span><span class="desc">Copy volume path</span></div>
-            <div class="keysLine"><span class="key">Arrows / Enter</span><span class="desc">Keyboard-navigate volume list</span></div>
           </div>
         </div>
 

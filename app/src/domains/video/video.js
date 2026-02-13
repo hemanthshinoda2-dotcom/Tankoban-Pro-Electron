@@ -197,9 +197,7 @@ videoProgress IPC calls
     videoResumeBtn: qs('videoResumeBtn'),
     videoRestartBtn: qs('videoRestartBtn'),
 
-    // Keys overlay (video player + video library)
-    videoKeysOverlay: qs('videoKeysOverlay'),
-    videoKeysClose: qs('videoKeysClose'),
+    // Tips overlay (video library)
     videoLibTipsOverlay: qs('videoLibTipsOverlay'),
     videoLibTipsClose: qs('videoLibTipsClose'),
   };
@@ -4208,7 +4206,6 @@ function getContinueVideos() {
 
   function closeOrBackFromPlayer(){
   // mirrors the behavior of the existing Back button handler
-  toggleVideoKeysOverlay(false);
   safe(async () => {
     await saveNow(true);
     if (IS_VIDEO_SHELL) { safe(() => showVideoLibrary()); safe(() => Tanko.api.window.close()); return; }
@@ -5948,17 +5945,6 @@ function togglePlaylistPanel() {
   if (hidden) openPlaylistPanel(); else closePlaylistPanel();
 }
 
-// ── Keys overlay (video player) ──────────────────────────────
-let videoKeysOverlayOpen = false;
-
-function toggleVideoKeysOverlay(force) {
-  if (!el.videoKeysOverlay) return;
-  const next = typeof force === 'boolean' ? force : !videoKeysOverlayOpen;
-  if (next) { closePlaylistPanel(); closeTracksPanel(); closeVolPanel(); closeVideoCtxMenu(); }
-  videoKeysOverlayOpen = next;
-  el.videoKeysOverlay.classList.toggle('hidden', !next);
-}
-
 // ── Tips overlay (video library) ─────────────────────────────
 let videoLibTipsOpen = false;
 
@@ -5968,6 +5954,10 @@ function toggleVideoLibTipsOverlay(force) {
   videoLibTipsOpen = next;
   el.videoLibTipsOverlay.classList.toggle('hidden', !next);
 }
+
+// Bind close button + backdrop click for video library tips overlay
+el.videoLibTipsClose?.addEventListener('click', () => toggleVideoLibTipsOverlay(false));
+el.videoLibTipsOverlay?.addEventListener('click', (e) => { if (e.target === el.videoLibTipsOverlay) toggleVideoLibTipsOverlay(false); });
 
 function epKey(ep) {
   if (!ep) return '';
@@ -8114,14 +8104,6 @@ function adjustVolume(delta){
     });
     el.videoPlaylistCloseBtn?.addEventListener('click', closePlaylistPanel);
 
-    // Keys overlay close (video player)
-    el.videoKeysClose?.addEventListener('click', () => toggleVideoKeysOverlay(false));
-    el.videoKeysOverlay?.addEventListener('click', (e) => { if (e.target === el.videoKeysOverlay) toggleVideoKeysOverlay(false); });
-
-    // Tips overlay close (video library)
-    el.videoLibTipsClose?.addEventListener('click', () => toggleVideoLibTipsOverlay(false));
-    el.videoLibTipsOverlay?.addEventListener('click', (e) => { if (e.target === el.videoLibTipsOverlay) toggleVideoLibTipsOverlay(false); });
-
     // Build 55: click outside any open panel closes it (prevents sticky overlays)
     document.addEventListener('mousedown', (e) => {
       const t = e.target;
@@ -8654,13 +8636,6 @@ function bindKeyboard(){
           return; // swallow keys while open
         }
         return;
-      }
-
-      // Video player keys overlay (K when in player)
-      if (lower === 'k') { e.preventDefault(); e.stopPropagation(); toggleVideoKeysOverlay(); return; }
-      if (videoKeysOverlayOpen) {
-        if (key === 'Escape') { e.preventDefault(); e.stopPropagation(); toggleVideoKeysOverlay(false); return; }
-        return; // swallow keys while open
       }
 
       if (key === 'Escape') {

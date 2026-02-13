@@ -355,6 +355,9 @@ Hot search tokens:
     keysOverlay: $('#keysOverlay'),
     keysClose: $('#keysClose'),
 
+    mangaLibTipsOverlay: $('#mangaLibTipsOverlay'),
+    mangaLibTipsClose: $('#mangaLibTipsClose'),
+
     // volume navigator
     volNavOverlay: $('#volNavOverlay'),
     volNavTitle: $('#volNavTitle'),

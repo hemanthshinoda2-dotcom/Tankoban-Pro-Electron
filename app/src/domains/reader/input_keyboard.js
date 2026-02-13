@@ -89,8 +89,17 @@ window.addEventListener('keydown', async (e) => {
       return;
     }
 
-    // Keys overlay takes priority
-    if (!typing) {
+    // Manga library tips overlay (K when NOT in reader)
+    if (!inPlayer && !typing) {
+      if (e.code === 'KeyK') { e.preventDefault(); toggleMangaLibTipsOverlay(); return; }
+    }
+    if (!inPlayer && isMangaLibTipsOpen()) {
+      if (e.code === 'Escape') { e.preventDefault(); toggleMangaLibTipsOverlay(false); return; }
+      return;
+    }
+
+    // Reader keys overlay (K when in reader)
+    if (inPlayer && !typing) {
       if (e.code === 'KeyK') { e.preventDefault(); toggleKeysOverlay(); return; }
     }
     if (isKeysOpen()) {

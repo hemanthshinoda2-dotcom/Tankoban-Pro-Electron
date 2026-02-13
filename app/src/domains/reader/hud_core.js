@@ -247,6 +247,17 @@ async function syncLibraryFullscreenBtn() {
     try { hudRefreshAfterUiChange(); } catch {}
   }
 
+  // Manga library tips overlay
+  function isMangaLibTipsOpen() {
+    return el.mangaLibTipsOverlay && !el.mangaLibTipsOverlay.classList.contains('hidden');
+  }
+
+  function toggleMangaLibTipsOverlay(force) {
+    if (!el.mangaLibTipsOverlay) return;
+    const next = typeof force === 'boolean' ? force : !isMangaLibTipsOpen();
+    el.mangaLibTipsOverlay.classList.toggle('hidden', !next);
+  }
+
   
 
 
