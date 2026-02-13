@@ -18,6 +18,18 @@ const { Worker } = require('worker_threads');
 const { dialog, BrowserWindow } = require('electron');
 const { pathToFileURL } = require('url');
 
+// DIAG: Temporary diagnostic logger for debugging scan/add issues
+const __diagLog = (() => {
+  const { app } = require('electron');
+  let logPath = null;
+  return function(msg) {
+    try {
+      if (!logPath) logPath = path.join(app.getPath('userData'), 'diag_video.log');
+      const ts = new Date().toISOString();
+      fs.appendFileSync(logPath, `[${ts}] ${msg}\n`);
+    } catch {}
+  };
+})();
 
 const { spawn } = require('child_process');
 
@@ -707,7 +719,13 @@ episodeCounts,
  * Lifted from Build 78B index.js lines 449-451.
  */
 function emitVideoUpdated(ctx) {
-  try { ctx.win?.webContents?.send(ctx.EVENT.VIDEO_UPDATED, makeVideoStateSnapshot(ctx, undefined, { lite: true })); } catch {}
+  const w = ctx.win;
+  __diagLog(`emitVideoUpdated: ctx.win=${w ? 'BrowserWindow' : 'null'}, webContents=${w?.webContents ? 'yes' : 'no'}`);
+  try {
+    const snap = makeVideoStateSnapshot(ctx, undefined, { lite: true });
+    __diagLog(`emitVideoUpdated: snap.roots=${snap?.roots?.length}, snap.shows=${snap?.shows?.length}, snap.episodes=${snap?.episodes?.length}, error=${snap?.error || 'none'}, scanning=${snap?.scanning}`);
+    ctx.win?.webContents?.send(ctx.EVENT.VIDEO_UPDATED, snap);
+  } catch (e) { __diagLog(`emitVideoUpdated ERROR: ${e.message}`); }
 }
 
 /**
@@ -855,6 +873,7 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
     if (msg && msg.type === 'done') {
       (async () => {
         const idx = msg.idx || { roots: [], shows: [], episodes: [] };
+        __diagLog(`scan DONE: roots=${idx.roots?.length}, shows=${idx.shows?.length}, episodes=${idx.episodes?.length}`);
         videoCache.idx = {
           roots: Array.isArray(idx.roots) ? idx.roots : [],
           shows: Array.isArray(idx.shows) ? idx.shows : [],
@@ -902,6 +921,7 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
   });
 
   w.on('error', (err) => {
+    __diagLog(`scan WORKER ERROR: ${err?.message || err}\n${err?.stack || ''}`);
     if (myScanId !== videoCache.scanId) return;
     videoCache.error = String(err?.message || err);
     emitVideoUpdated(ctx);
@@ -909,11 +929,16 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
   });
 
   w.on('exit', (code) => {
+    __diagLog(`scan WORKER EXIT: code=${code}`);
     if (myScanId !== videoCache.scanId) return;
     if (code !== 0) {
       videoCache.error = `Video scan worker exited ${code}`;
       emitVideoUpdated(ctx);
       finish(false);
+    } else {
+      // code 0 but no 'done' message = silent failure
+      __diagLog('scan WORKER EXIT code=0 (no done message received, scan may have failed silently)');
+      finish(true);
     }
   });
 }
@@ -926,9 +951,12 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
  * Lifted from Build 78B index.js lines 1346-1354.
  */
 async function getState(ctx, _evt, opts) {
+  __diagLog('getState: ENTERED');
   await ensureVideoIndexLoaded(ctx);
   const state = readLibraryConfig(ctx);
+  __diagLog(`getState: videoFolders=${JSON.stringify(state.videoFolders)}, videoShowFolders=${JSON.stringify(state.videoShowFolders)}`);
   const snap = makeVideoStateSnapshot(ctx, state, opts);
+  __diagLog(`getState: snap.roots=${snap?.roots?.length}, snap.shows=${snap?.shows?.length}, snap.episodes=${snap?.episodes?.length}`);
 
   // Refresh once per run (deduped by lastScanKey/lastScanAt).
   startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders);
@@ -1201,25 +1229,39 @@ async function cancelScan(ctx) {
  * Lifted from Build 78B index.js lines 1419-1438.
  */
 async function addFolder(ctx, evt) {
-  const { BrowserWindow } = require('electron');
-  const w = BrowserWindow.fromWebContents(evt.sender);
-  const res = await dialog.showOpenDialog(w, {
-    title: 'Add video library folder',
-    properties: ['openDirectory'],
-  });
-  if (res.canceled || !res.filePaths?.length) return { ok: false };
+  __diagLog('addFolder: ENTERED');
+  try {
+    const { BrowserWindow } = require('electron');
+    __diagLog(`addFolder: evt=${!!evt}, evt.sender=${!!evt?.sender}`);
+    const w = BrowserWindow.fromWebContents(evt.sender);
+    __diagLog(`addFolder: parentWindow=${!!w}`);
+    const res = await dialog.showOpenDialog(w, {
+      title: 'Add video library folder',
+      properties: ['openDirectory'],
+    });
+    __diagLog(`addFolder: dialog result canceled=${res.canceled}, paths=${JSON.stringify(res.filePaths)}`);
+    if (res.canceled || !res.filePaths?.length) return { ok: false };
 
-  const folder = res.filePaths[0];
-  const state = readLibraryConfig(ctx);
-  state.videoFolders = Array.isArray(state.videoFolders) ? state.videoFolders : [];
-  if (!state.videoFolders.includes(folder)) state.videoFolders.unshift(folder);
-  writeLibraryConfig(ctx, state);
+    const folder = res.filePaths[0];
+    const state = readLibraryConfig(ctx);
+    state.videoFolders = Array.isArray(state.videoFolders) ? state.videoFolders : [];
+    __diagLog(`addFolder: existing videoFolders=${JSON.stringify(state.videoFolders)}`);
+    if (!state.videoFolders.includes(folder)) state.videoFolders.unshift(folder);
+    __diagLog(`addFolder: updated videoFolders=${JSON.stringify(state.videoFolders)}`);
+    writeLibraryConfig(ctx, state);
 
-  await ensureVideoIndexLoaded(ctx);
-  const snap = makeVideoStateSnapshot(ctx, state, { lite: true });
-  startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders, { force: true });
+    await ensureVideoIndexLoaded(ctx);
+    const snap = makeVideoStateSnapshot(ctx, state, { lite: true });
+    __diagLog(`addFolder: snap.videoFolders=${JSON.stringify(snap.videoFolders)}, snap.videoShowFolders=${JSON.stringify(snap.videoShowFolders)}`);
+    __diagLog(`addFolder: snap.roots=${snap?.roots?.length}, snap.shows=${snap?.shows?.length}`);
+    startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders, { force: true });
 
-  return { ok: true, state: snap };
+    __diagLog('addFolder: returning ok=true');
+    return { ok: true, state: snap };
+  } catch (e) {
+    __diagLog(`addFolder ERROR: ${e.message}\n${e.stack}`);
+    throw e;
+  }
 }
 
 /**
@@ -1227,25 +1269,35 @@ async function addFolder(ctx, evt) {
  * Build 95: This is distinct from adding a root folder.
  */
 async function addShowFolder(ctx, evt) {
-  const { BrowserWindow } = require('electron');
-  const w = BrowserWindow.fromWebContents(evt.sender);
-  const res = await dialog.showOpenDialog(w, {
-    title: 'Add show folder',
-    properties: ['openDirectory'],
-  });
-  if (res.canceled || !res.filePaths?.length) return { ok: false };
+  __diagLog('addShowFolder: ENTERED');
+  try {
+    const { BrowserWindow } = require('electron');
+    __diagLog(`addShowFolder: evt=${!!evt}, evt.sender=${!!evt?.sender}`);
+    const w = BrowserWindow.fromWebContents(evt.sender);
+    __diagLog(`addShowFolder: parentWindow=${!!w}`);
+    const res = await dialog.showOpenDialog(w, {
+      title: 'Add show folder',
+      properties: ['openDirectory'],
+    });
+    __diagLog(`addShowFolder: dialog result canceled=${res.canceled}, paths=${JSON.stringify(res.filePaths)}`);
+    if (res.canceled || !res.filePaths?.length) return { ok: false };
 
-  const folder = res.filePaths[0];
-  const state = readLibraryConfig(ctx);
-  state.videoShowFolders = Array.isArray(state.videoShowFolders) ? state.videoShowFolders : [];
-  if (!state.videoShowFolders.includes(folder)) state.videoShowFolders.unshift(folder);
-  writeLibraryConfig(ctx, state);
+    const folder = res.filePaths[0];
+    const state = readLibraryConfig(ctx);
+    state.videoShowFolders = Array.isArray(state.videoShowFolders) ? state.videoShowFolders : [];
+    __diagLog(`addShowFolder: existing videoShowFolders=${JSON.stringify(state.videoShowFolders)}`);
+    if (!state.videoShowFolders.includes(folder)) state.videoShowFolders.unshift(folder);
+    writeLibraryConfig(ctx, state);
 
-  await ensureVideoIndexLoaded(ctx);
-  const snap = makeVideoStateSnapshot(ctx, state, { lite: true });
-  startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders, { force: true });
+    await ensureVideoIndexLoaded(ctx);
+    const snap = makeVideoStateSnapshot(ctx, state, { lite: true });
+    startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders, { force: true });
 
-  return { ok: true, state: snap };
+    return { ok: true, state: snap };
+  } catch (e) {
+    __diagLog(`addShowFolder ERROR: ${e.message}\n${e.stack}`);
+    throw e;
+  }
 }
 
 /**

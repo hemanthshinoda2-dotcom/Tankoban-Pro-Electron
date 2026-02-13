@@ -36,6 +36,7 @@
       "main.js",
       "library_scan_worker.js",
       "video_scan_worker.js",
+      "workers/**/*",
       "preload.js",
       "main/**/*",
       "preload/**/*",

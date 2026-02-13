@@ -2464,8 +2464,11 @@ function setReaderMode(next) {
   async function refreshLibrary() {
     showLoading('Loading library');
     try {
+      console.log('[boot] refreshLibrary: calling library.getState...');
       appState.library = await Tanko.api.library.getState();
+      console.log('[boot] refreshLibrary: getState returned', appState.library ? 'object with series=' + (appState.library.series?.length) + ' books=' + (appState.library.books?.length) : 'falsy');
       appState.progressAll = await Tanko.api.progress.getAll();
+      console.log('[boot] refreshLibrary: progress loaded');
       bookById = new Map((appState.library.books || []).map(b => [b.id, b]));
       buildLibraryDerivedCaches();
       scheduleRenderLibrary();
@@ -2611,7 +2614,9 @@ function setReaderMode(next) {
 // Minimal initial boot flow (library-first). Reader domain stays deferred until first openBook().
 if (!window.__tankoInitialBootStarted) {
   window.__tankoInitialBootStarted = true;
+  console.log('[boot] Starting refreshLibrary...');
   refreshLibrary().then(async () => {
+    console.log('[boot] refreshLibrary completed OK');
     bootReady = true;
 
     // Prefer OS/DnD open over openBookId query when present.
@@ -2637,7 +2642,7 @@ if (!window.__tankoInitialBootStarted) {
     } else {
       toast('Volume not found');
     }
-  }).catch(err => toast(String(err))).finally(() => {
+  }).catch(err => { console.error('[boot] refreshLibrary FAILED:', err); toast(String(err)); }).finally(() => {
     try {
       const bt = window.Tanko && window.Tanko.bootTiming;
       if (bt && bt.initialBootDoneMs == null) {

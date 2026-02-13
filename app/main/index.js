@@ -388,6 +388,8 @@ function createWindow(opts = {}) {
 // Player launcher mode: launch Qt player directly without showing the library window.
 // Looks up the video in the library index for progress tracking context.
 async function __launchVideoFromFileAssoc(videoPath) {
+  console.log('[launcher] __launchVideoFromFileAssoc:', videoPath);
+
   const playerCoreDomain = require('./domains/player_core');
   const storage = require('./lib/storage');
   const { CHANNEL, EVENT: EVT } = require('../shared/ipc');
@@ -458,6 +460,7 @@ async function __launchVideoFromFileAssoc(videoPath) {
   } catch {}
 
   const appExe = __isPackaged ? process.execPath : '';
+  console.log('[launcher] launchQt:', { appExe, videoId, showId, startSeconds });
 
   const result = await playerCoreDomain.launchQt(ctx, {}, {
     filePath: videoPath,
@@ -475,6 +478,7 @@ async function __launchVideoFromFileAssoc(videoPath) {
     prefSubVisibility,
   });
 
+  console.log('[launcher] launchQt result:', result?.ok, result?.error);
   if (!result || !result.ok) {
     throw new Error(result ? result.error : 'launchQt_failed');
   }
@@ -558,7 +562,10 @@ if (!gotLock) {
   // Detect video file in argv: enter player launcher mode (no library window)
   try {
     __pendingVideoPath = extractVideoPathFromArgv(process.argv);
-    if (__pendingVideoPath) __isPlayerLauncherMode = true;
+    if (__pendingVideoPath) {
+      console.log('[launcher] Video in argv:', __pendingVideoPath);
+      __isPlayerLauncherMode = true;
+    }
   } catch {}
 }
 

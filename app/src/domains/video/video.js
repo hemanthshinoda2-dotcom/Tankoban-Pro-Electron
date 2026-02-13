@@ -39,8 +39,8 @@ videoProgress IPC calls
   const safe = (fn) => {
     try {
       const r = fn();
-      if (r && typeof r.then === 'function') r.catch(() => {});
-    } catch {}
+      if (r && typeof r.then === 'function') r.catch((e) => { console.error('[safe] async error:', e); });
+    } catch (e) { console.error('[safe] sync error:', e); }
   };
   const qs = (id) => document.getElementById(id);
 
@@ -8959,31 +8959,45 @@ function bindKeyboard(){
     // BUILD 111 FIX: All add/restore handlers return { ok, state: snap }, not { idx }.
     // Use applyVideoSnapshot(r.state) consistently (matches removeFolder / hideShow).
     el.videoAddFolderBtn?.addEventListener('click', async () => {
-      safe(async () => {
+      console.log('[video] addFolder: clicked');
+      try {
         const r = await Tanko.api.video.addFolder();
+        console.log('[video] addFolder: result', r);
         if (r && r.state) { applyVideoSnapshot(r.state); toast('Root folder added'); }
-      });
+        else if (r && r.ok === false) { console.log('[video] addFolder: dialog canceled or no selection'); }
+        else { console.warn('[video] addFolder: unexpected result shape', r); }
+      } catch (e) { console.error('[video] addFolder error:', e); toast('Error: ' + (e.message || e)); }
     });
 
     el.videoAddShowFolderBtn?.addEventListener('click', async () => {
-      safe(async () => {
+      console.log('[video] addShowFolder: clicked');
+      try {
         const r = await Tanko.api.video.addShowFolder();
+        console.log('[video] addShowFolder: result', r);
         if (r && r.state) { applyVideoSnapshot(r.state); toast('Show folder added'); }
-      });
+        else if (r && r.ok === false) { console.log('[video] addShowFolder: dialog canceled or no selection'); }
+        else { console.warn('[video] addShowFolder: unexpected result shape', r); }
+      } catch (e) { console.error('[video] addShowFolder error:', e); toast('Error: ' + (e.message || e)); }
     });
 
     el.videoAddFilesBtn?.addEventListener('click', async () => {
-      safe(async () => {
+      console.log('[video] addFiles: clicked');
+      try {
         const r = await Tanko.api.video.addFiles();
+        console.log('[video] addFiles: result', r);
         if (r && r.state) { applyVideoSnapshot(r.state); toast('Files added'); }
-      });
+        else if (r && r.ok === false) { console.log('[video] addFiles: dialog canceled or no selection'); }
+        else { console.warn('[video] addFiles: unexpected result shape', r); }
+      } catch (e) { console.error('[video] addFiles error:', e); toast('Error: ' + (e.message || e)); }
     });
 
     el.videoRestoreHiddenBtn?.addEventListener('click', async () => {
-      safe(async () => {
+      console.log('[video] restoreHidden: clicked');
+      try {
         const r = await Tanko.api.video.restoreAllHiddenShows();
+        console.log('[video] restoreHidden: result', r);
         if (r && r.state) { applyVideoSnapshot(r.state); toast('Hidden shows restored'); }
-      });
+      } catch (e) { console.error('[video] restoreHidden error:', e); toast('Error: ' + (e.message || e)); }
     });
 
     el.videoOpenFileBtn?.addEventListener('click', async () => {
@@ -9093,11 +9107,13 @@ function bindKeyboard(){
           if (!result || typeof result !== 'object') return;
 
           // BUILD 111 FIX: snapshot is sent directly (roots/shows/episodes at top level), not wrapped in .idx.
+          console.log('[video] onUpdated flush: roots=' + (result.roots?.length) + ' shows=' + (result.shows?.length) + ' episodes=' + (result.episodes?.length));
           applyVideoSnapshot(result);
           scheduleAutoPosterSweep();
         };
 
         Tanko.api.video.onUpdated((result) => {
+          console.log('[video] onUpdated: received push event', typeof result, result ? Object.keys(result).join(',') : 'null');
           if (!result || typeof result !== 'object') return;
           pendingVideoUpdate = result;
           if (videoUpdateTimer) return;

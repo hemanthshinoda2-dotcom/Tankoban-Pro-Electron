@@ -18,6 +18,19 @@ This file is a complete extraction of all IPC-related code from main.js.
 
 module.exports = function registerIpc({ APP_ROOT, win, windows }) {
 
+// DIAG: Boot logger to trace IPC registration issues (writes to temp dir)
+const __bLog = (() => {
+  const _os = require('os');
+  const _fs = require('fs');
+  const _path = require('path');
+  const logFile = _path.join(_os.tmpdir(), 'tankoban_boot_ipc.log');
+  try { _fs.writeFileSync(logFile, ''); } catch {} // truncate
+  return function(msg) {
+    try { _fs.appendFileSync(logFile, `[${new Date().toISOString()}] ${msg}\n`); } catch {}
+  };
+})();
+__bLog('registerIpc: ENTERED, win=' + (win ? 'BrowserWindow' : 'null') + ', windows=' + (windows ? 'Set(size=' + windows.size + ')' : 'undefined'));
+
 // ========== IMPORTS ==========
 const { app, BrowserWindow, dialog, ipcMain, Menu, shell, clipboard, nativeImage, screen } = require('electron');
 const { Worker } = require('worker_threads');
@@ -30,6 +43,7 @@ const crypto = require('crypto');
 
 // Phase 2: IPC contract (Build 76) - Phase 3: adjusted path
 const { CHANNEL, EVENT } = require('../../shared/ipc');
+__bLog('registerIpc: core imports OK');
 
 // Phase 4A: Storage library and persistence domains (Build 78A)
 const storage = require('../lib/storage');
@@ -38,6 +52,7 @@ const videoProgress = require('../domains/videoProgress');
 const videoSettings = require('../domains/videoSettings');
 const videoUi = require('../domains/videoUi');
 const seriesSettings = require('../domains/seriesSettings');
+__bLog('registerIpc: Phase 4A domains OK');
 
 // BUILD88: Ensure health:ping is always registered even if later registry modules throw.
 try {
@@ -49,21 +64,37 @@ const windowDomain = require('../domains/window');
 const shellDomain = require('../domains/shell');
 const archivesDomain = require('../domains/archives');
 const exportDomain = require('../domains/export');
+__bLog('registerIpc: Phase 4B domains OK');
 
 // Phase 4C: Thumbs, library, video domains (Build 78C)
 const thumbsDomain = require('../domains/thumbs');
 const libraryDomain = require('../domains/library');
 const videoDomain = require('../domains/video');
+__bLog('registerIpc: Phase 4C domains OK (thumbs, library, video)');
 
 // Phase 4D: MPV/libmpv extraction + thin registry sweep (Build 78D)
 const playerCoreDomain = require('../domains/player_core');
 const clipboardDomain = require('../domains/clipboard');
 const filesDomain = require('../domains/files');
 const comicDomain = require('../domains/comic');
+__bLog('registerIpc: Phase 4D domains OK (player_core, clipboard, files, comic)');
 
 // Phase 4A/4B: Build context object for domain handlers
 // Note: createWindow and createVideoShellWindow are defined below and added to ctx after definition
-const ctx = { APP_ROOT, win, storage, CHANNEL, EVENT };
+// BUILD 111 FIX: win is captured by value at registration time, which may be undefined if registerIpc
+// is called before createWindow (e.g., launcher mode). Use a getter that dynamically resolves from the
+// shared `windows` Set so push events (VIDEO_UPDATED, etc.) reach the renderer after window creation.
+const ctx = {
+  APP_ROOT,
+  get win() {
+    for (const w of windows) {
+      if (w && !w.isDestroyed()) return w;
+    }
+    return null;
+  },
+  storage, CHANNEL, EVENT,
+};
+__bLog('registerIpc: ctx created OK');
 
 // Phase 2: IPC contract (Build 76)
 
@@ -1103,25 +1134,34 @@ ctx.getWin = () => win; // Live win getter for domains that need it
 // ========== IPC: Registry Modules (Nirvana 10) ==========
 // This file owns IPC bootstrap + ctx creation.
 // Individual ipcMain.handle registrations are grouped in ./register/*.js for readability.
-const registerModules = [
-  require('./register/window'),
-  require('./register/shell'),
-  require('./register/library'),
-  require('./register/video'),
-  require('./register/video_posters'),
-  require('./register/page_thumbnails'),
-  require('./register/archives'),
-  require('./register/export'),
-  require('./register/progress'),
-  require('./register/video_progress'),
-  require('./register/video_settings'),
-  require('./register/video_ui_state'),
-  require('./register/player_core'),
-  require('./register/series_settings'),
-  require('./register/health_check'),
-];
+let registerModules;
+try {
+  registerModules = [
+    require('./register/window'),
+    require('./register/shell'),
+    require('./register/library'),
+    require('./register/video'),
+    require('./register/video_posters'),
+    require('./register/page_thumbnails'),
+    require('./register/archives'),
+    require('./register/export'),
+    require('./register/progress'),
+    require('./register/video_progress'),
+    require('./register/video_settings'),
+    require('./register/video_ui_state'),
+    require('./register/player_core'),
+    require('./register/series_settings'),
+    require('./register/health_check'),
+  ];
+  __bLog('registerIpc: all register modules required OK (' + registerModules.length + ' modules)');
+} catch (e) {
+  __bLog('registerIpc: FAILED to require register modules: ' + (e && e.message ? e.message : e));
+  registerModules = [];
+}
 
-for (const register of registerModules) {
+const registerModuleNames = ['window','shell','library','video','video_posters','page_thumbnails','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','series_settings','health_check'];
+for (let i = 0; i < registerModules.length; i++) {
+  const register = registerModules[i];
   try {
     register({ ipcMain, CHANNEL, ctx, domains: {
     archivesDomain,
@@ -1141,10 +1181,14 @@ for (const register of registerModules) {
     videoUi,
     seriesSettings,
     }});
+    __bLog('registerIpc: registered ' + (registerModuleNames[i] || i));
   } catch (e) {
     // Keep IPC partially functional even if a single register module fails.
+    __bLog('registerIpc: FAILED to register ' + (registerModuleNames[i] || i) + ': ' + (e && e.message ? e.message : e));
     try { console.error('[ipc] register module failed:', e && e.message ? e.message : e); } catch {}
   }
 }
+
+__bLog('registerIpc: ALL DONE');
 
 }; // end registerIpc
