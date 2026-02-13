@@ -43,8 +43,7 @@
       "resources/**/*",
       "build/**/*",
       "src/**/*",
-      "package.json",
-      "node_modules/**/*"
+      "package.json"
     ],
     "asar": true,
     "asarUnpack": [
