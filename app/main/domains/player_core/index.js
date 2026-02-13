@@ -58,6 +58,8 @@ const __state = {
   qtReturnWasFullscreen: false,
   qtRestoreFullscreenOnReturn: false,
   qtLastUiEventToken: '',
+  // Player launcher mode: headless (no library window). Quit app when player exits.
+  launcherMode: false,
 };
 
 // Debounced/throttled progress writes (V1 foundation; not actively used until V1full routes events here)
@@ -371,6 +373,7 @@ __state.qtLaunching = true;
   __state.qtReturnWasFullscreen = !!returnWinFullscreen;
   __state.qtRestoreFullscreenOnReturn = !!returnWinFullscreen;
   __state.qtLastUiEventToken = '';
+  if (a.launcherMode) __state.launcherMode = true;
 
   const startSeconds = Number(a.startSeconds);
   const start = Number.isFinite(startSeconds) ? startSeconds : 0;
@@ -528,6 +531,12 @@ try {
     argv.push('--command-file', commandFile);
   } catch {}
 
+  // Pass the main app exe path so the player can summon the library window.
+  try {
+    const appExe = a.appExe ? String(a.appExe) : (app.isPackaged ? process.execPath : '');
+    if (appExe) argv.push('--app-exe', appExe);
+  } catch {}
+
   // Emit a header before preflight so failures still produce a usable log file.
   __appendLog(`[${new Date().toISOString()}] launchQt: begin\n`);
   __appendLog(`  mode=${canUseBundledExe ? 'bundled-exe' : 'python'}\n`);
@@ -645,6 +654,7 @@ if (spawnErr) {
     __state.qtReturnWasFullscreen = false;
     __state.qtRestoreFullscreenOnReturn = false;
     __state.qtLastUiEventToken = '';
+    __state.launcherMode = false;
   } catch {}
   // BUILD21: Clean up any playlist file created for this session.
   try { __cleanupQtSessionFiles(null, playlistFile); } catch {}
@@ -1002,24 +1012,57 @@ function __restoreWindowAfterPlayerExit(ctx, exitCode, signal) {
     // BUILD20: Stop live sync timer first to avoid concurrent reads while restoring.
     try { __stopQtProgressSync(); } catch {}
 
-    const win = __resolveReturnWindow(ctx);
-    if (!win || win.isDestroyed()) {
-      __log('BUILD14_ERROR', 'No window to restore');
-      return;
-    }
-
     // FIX19: Sync Qt session progress into Tankoban store immediately on exit/crash (best-effort).
+    // Moved before window check so progress is saved even in headless launcher mode.
     let synced = null;
     try { synced = __syncProgressFromQtSession(ctx); } catch (e) { synced = null; }
     if (synced && typeof synced.playerFullscreen === 'boolean' && !__state.qtLastUiEventToken) {
       __state.qtRestoreFullscreenOnReturn = !!synced.playerFullscreen;
     }
+
+    // BUILD21: Clean up session artifacts (best-effort). If Tankoban crashes, recovery will import on next launch.
+    try { __cleanupQtSessionFiles(__state.qtProgressFile, __state.qtPlaylistFile); } catch {}
+
+    // Capture values before clearing state (needed for window restore below)
+    const wasLauncherMode = !!__state.launcherMode;
     const restoreFullscreen = !!__state.qtRestoreFullscreenOnReturn;
+    const returnBounds = __state.qtReturnBounds;
+
+    // Clear Qt player tracking
+    __state.qtLaunching = false;
+    __state.qtPlayerChild = null;
+    __state.qtPlayerSessionId = null;
+    __state.qtReturnBounds = null;
+    __state.qtReturnWinId = null;
+    __state.qtReturnSessionId = null;
+    __state.qtReturnWasFullscreen = false;
+    __state.qtRestoreFullscreenOnReturn = false;
+    __state.qtLastUiEventToken = '';
+    // FIX16: Clear per-session sync fields
+    __state.qtProgressFile = null;
+    __state.qtVideoId = null;
+    __state.qtPlaylistFile = null;
+    __state.launcherMode = false;
+
+    // Player launcher mode: no window to restore. Quit if no library was summoned.
+    if (wasLauncherMode) {
+      const allWindows = BrowserWindow.getAllWindows();
+      if (!allWindows || allWindows.length === 0) {
+        try { app.quit(); } catch {}
+      }
+      // If a library window exists (user clicked LIB), fall through to show it.
+    }
+
+    const win = __resolveReturnWindow(ctx);
+    if (!win || win.isDestroyed()) {
+      __log('BUILD14_RESTORE', 'No window to restore (headless or closed)');
+      return;
+    }
 
     if (!restoreFullscreen) {
       try { win.setFullScreen(false); } catch (e) { __log('BUILD14_ERROR', `fullscreenOff: ${e.message}`); }
       try {
-        const b = __state.qtReturnBounds;
+        const b = returnBounds;
         if (b && typeof b === 'object') win.setBounds(b);
       } catch (e) { __log('BUILD14_ERROR', `setBounds: ${e.message}`); }
     } else {
@@ -1054,24 +1097,6 @@ function __restoreWindowAfterPlayerExit(ctx, exitCode, signal) {
       }
     } catch {}
 
-    // BUILD21: Clean up session artifacts (best-effort). If Tankoban crashes, recovery will import on next launch.
-    try { __cleanupQtSessionFiles(__state.qtProgressFile, __state.qtPlaylistFile); } catch {}
-    
-    // Clear Qt player tracking
-    __state.qtLaunching = false;
-    __state.qtPlayerChild = null;
-    __state.qtPlayerSessionId = null;
-    __state.qtReturnBounds = null;
-    __state.qtReturnWinId = null;
-    __state.qtReturnSessionId = null;
-    __state.qtReturnWasFullscreen = false;
-    __state.qtRestoreFullscreenOnReturn = false;
-    __state.qtLastUiEventToken = '';
-    // FIX16: Clear per-session sync fields
-    __state.qtProgressFile = null;
-    __state.qtVideoId = null;
-    __state.qtPlaylistFile = null;
-    
   } catch (e) {
     __log('BUILD14_ERROR', `restore: ${String(e && e.message ? e.message : e)}`);
   }

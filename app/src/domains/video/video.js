@@ -8956,79 +8956,33 @@ function bindKeyboard(){
     updateQtToggleUi();
 
     // Video library UI bindings (BUILD 97)
+    // BUILD 111 FIX: All add/restore handlers return { ok, state: snap }, not { idx }.
+    // Use applyVideoSnapshot(r.state) consistently (matches removeFolder / hideShow).
     el.videoAddFolderBtn?.addEventListener('click', async () => {
       safe(async () => {
         const r = await Tanko.api.video.addFolder();
-        if (r && r.idx) {
-          state.roots = r.idx.roots || [];
-          state.shows = r.idx.shows || [];
-          state.videos = r.idx.episodes || [];
-          state.episodes = state.videos;
-          buildEpisodesByShowId();
-          rebuildVideoSearchIndex();
-          rebuildVideoProgressSummaryCache();
-          renderVideoFolders();
-          renderVideoHome();
-          renderContinue();
-          toast('Root folder added');
-        }
+        if (r && r.state) { applyVideoSnapshot(r.state); toast('Root folder added'); }
       });
     });
 
     el.videoAddShowFolderBtn?.addEventListener('click', async () => {
       safe(async () => {
         const r = await Tanko.api.video.addShowFolder();
-        if (r && r.idx) {
-          state.roots = r.idx.roots || [];
-          state.shows = r.idx.shows || [];
-          state.videos = r.idx.episodes || [];
-          state.episodes = state.videos;
-          buildEpisodesByShowId();
-          rebuildVideoSearchIndex();
-          rebuildVideoProgressSummaryCache();
-          renderVideoFolders();
-          renderVideoHome();
-          renderContinue();
-          toast('Show folder added');
-        }
+        if (r && r.state) { applyVideoSnapshot(r.state); toast('Show folder added'); }
       });
     });
 
     el.videoAddFilesBtn?.addEventListener('click', async () => {
       safe(async () => {
         const r = await Tanko.api.video.addFiles();
-        if (r && r.idx) {
-          state.roots = r.idx.roots || [];
-          state.shows = r.idx.shows || [];
-          state.videos = r.idx.episodes || [];
-          state.episodes = state.videos;
-          buildEpisodesByShowId();
-          rebuildVideoSearchIndex();
-          rebuildVideoProgressSummaryCache();
-          renderVideoFolders();
-          renderVideoHome();
-          renderContinue();
-          toast('Files added');
-        }
+        if (r && r.state) { applyVideoSnapshot(r.state); toast('Files added'); }
       });
     });
 
     el.videoRestoreHiddenBtn?.addEventListener('click', async () => {
       safe(async () => {
         const r = await Tanko.api.video.restoreAllHiddenShows();
-        if (r && r.idx) {
-          state.roots = r.idx.roots || [];
-          state.shows = r.idx.shows || [];
-          state.videos = r.idx.episodes || [];
-          state.episodes = state.videos;
-          buildEpisodesByShowId();
-          rebuildVideoSearchIndex();
-          rebuildVideoProgressSummaryCache();
-          renderVideoFolders();
-          renderVideoHome();
-          renderContinue();
-          toast('Hidden shows restored');
-        }
+        if (r && r.state) { applyVideoSnapshot(r.state); toast('Hidden shows restored'); }
       });
     });
 
@@ -9136,27 +9090,15 @@ function bindKeyboard(){
           videoUpdateTimer = null;
           const result = pendingVideoUpdate;
           pendingVideoUpdate = null;
-          if (!result || !result.idx) return;
+          if (!result || typeof result !== 'object') return;
 
-          // Coalesce rapid scan/update bursts into one heavy rebuild + render pass.
-          state.roots = result.idx.roots || [];
-          state.shows = result.idx.shows || [];
-          state.videos = result.idx.episodes || [];
-          state.episodes = state.videos;
-          buildEpisodesByShowId();
-          rebuildVideoSearchIndex();
-          rebuildVideoProgressSummaryCache();
-          if (state.mode === 'videos') {
-            renderVideoFolders();
-            if (state.videoSubView === 'home') renderVideoHome();
-            else if (state.videoSubView === 'show' && state.selectedShowId) renderVideoShowView();
-            renderContinue();
-          }
+          // BUILD 111 FIX: snapshot is sent directly (roots/shows/episodes at top level), not wrapped in .idx.
+          applyVideoSnapshot(result);
           scheduleAutoPosterSweep();
         };
 
         Tanko.api.video.onUpdated((result) => {
-          if (!result || !result.idx) return;
+          if (!result || typeof result !== 'object') return;
           pendingVideoUpdate = result;
           if (videoUpdateTimer) return;
           videoUpdateTimer = setTimeout(flushVideoUpdate, 140);

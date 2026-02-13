@@ -1258,8 +1258,11 @@ async function removeFolder(ctx, _evt, folderPath) {
   if (!target) return { ok: false };
 
   const state = readLibraryConfig(ctx);
+  // BUILD 111 FIX: Also remove from videoShowFolders so show folders can be properly removed.
   state.videoFolders = Array.isArray(state.videoFolders) ? state.videoFolders : [];
   state.videoFolders = state.videoFolders.filter(p => p !== target);
+  state.videoShowFolders = Array.isArray(state.videoShowFolders) ? state.videoShowFolders : [];
+  state.videoShowFolders = state.videoShowFolders.filter(p => p !== target);
   writeLibraryConfig(ctx, state);
 
   await ensureVideoIndexLoaded(ctx);

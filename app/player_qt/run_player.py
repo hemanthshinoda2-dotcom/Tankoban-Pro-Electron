@@ -163,6 +163,7 @@ def parse_args():
     p.add_argument("--win-w", dest="win_w", type=int, default=None)
     p.add_argument("--win-h", dest="win_h", type=int, default=None)
     p.add_argument("--parent-hwnd", dest="parent_hwnd", type=int, default=0)
+    p.add_argument("--app-exe", dest="app_exe", default="")
     args, _unknown = p.parse_known_args()
     return args
 
@@ -1203,6 +1204,7 @@ class BottomHUDWidget(QWidget):
     subtitle_track_clicked = Signal()
 
     aspect_clicked = Signal()
+    library_clicked = Signal()
     fullscreen_clicked = Signal()
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1464,6 +1466,12 @@ class BottomHUDWidget(QWidget):
         self.subtitle_btn.setToolTip("Subtitle Track")
         self.subtitle_btn.clicked.connect(self.subtitle_track_clicked)
         right_row.addWidget(self.subtitle_btn)
+
+        self.library_btn = ChipButton("LIB")
+        self.library_btn.setToolTip("Open Library")
+        self.library_btn.clicked.connect(self.library_clicked)
+        self.library_btn.setVisible(False)
+        right_row.addWidget(self.library_btn)
 
         self.fullscreen_btn = ChipButton("⤢")
         self.fullscreen_btn.setToolTip("Fullscreen")
@@ -2586,6 +2594,7 @@ class PlayerWindow(QMainWindow):
         pref_aid: str = "",
         pref_sid: str = "",
         pref_sub_visibility: str = "",
+        app_exe: str = "",
     ):
         super().__init__()
         
@@ -2644,6 +2653,9 @@ class PlayerWindow(QMainWindow):
         self._pref_aid = str(pref_aid) if pref_aid is not None else ""
         self._pref_sid = str(pref_sid) if pref_sid is not None else ""
         self._pref_sub_visibility = str(pref_sub_visibility) if pref_sub_visibility is not None else ""
+
+        # Path to the main Tankoban app executable (for "Open Library" button)
+        self._app_exe = str(app_exe) if app_exe else ""
 
         # Track preference state (avoid polling mpv from Qt thread)
         self._last_aid = None
@@ -2941,7 +2953,13 @@ class PlayerWindow(QMainWindow):
         self.bottom_hud.subtitle_track_clicked.connect(self._show_subtitle_track_popover)
 
         self.bottom_hud.aspect_clicked.connect(self._show_aspect_menu)
+        self.bottom_hud.library_clicked.connect(self._on_summon_library)
         self.bottom_hud.fullscreen_clicked.connect(self._toggle_fullscreen)
+        # Show the Library button only when --app-exe was provided (packaged builds)
+        try:
+            self.bottom_hud.library_btn.setVisible(bool(self._app_exe))
+        except Exception:
+            pass
         try:
             self.bottom_hud.set_title(self._file_path.name)
         except Exception:
@@ -3659,6 +3677,18 @@ class PlayerWindow(QMainWindow):
                             playlist_paths = [str(x) for x in data if x]
                 except Exception:
                     pass
+
+            # Update app_exe if provided (enables Library button on subsequent opens)
+            try:
+                new_app_exe = str(msg.get("app_exe") or "").strip()
+                if new_app_exe:
+                    self._app_exe = new_app_exe
+                    try:
+                        self.bottom_hud.library_btn.setVisible(True)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
             # Execute open in-place
             self._open_external(
@@ -5677,6 +5707,26 @@ class PlayerWindow(QMainWindow):
     
     # ========== Back ==========
     
+    def _on_summon_library(self):
+        """Launch/show the Tankoban library window."""
+        try:
+            exe = getattr(self, "_app_exe", "")
+            if not exe:
+                return
+            _flags = 0
+            if sys.platform.startswith("win"):
+                _flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+            subprocess.Popen(
+                [exe, "--show-library"],
+                start_new_session=True,
+                creationflags=_flags,
+            )
+        except Exception:
+            try:
+                self.toast.show_toast("Could not open library")
+            except Exception:
+                pass
+
     def _on_back(self):
         """Return to library without terminating the player process."""
         try:
@@ -6105,6 +6155,7 @@ def main() -> int:
         "pref_aid": getattr(a, "pref_aid", ""),
         "pref_sid": getattr(a, "pref_sid", ""),
         "pref_sub_visibility": getattr(a, "pref_sub_visibility", ""),
+        "app_exe": getattr(a, "app_exe", ""),
     }
 
     if _try_send_ipc_open(_server_name, _ipc_payload):
@@ -6141,6 +6192,7 @@ def main() -> int:
             pref_aid=getattr(a, 'pref_aid', ''),
             pref_sid=getattr(a, 'pref_sid', ''),
             pref_sub_visibility=getattr(a, 'pref_sub_visibility', ''),
+            app_exe=getattr(a, 'app_exe', ''),
         )
         try:
             if int(getattr(a, "parent_hwnd", 0) or 0) > 0:
