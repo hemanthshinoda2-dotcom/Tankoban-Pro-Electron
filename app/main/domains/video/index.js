@@ -656,7 +656,7 @@ function makeVideoStateSnapshot(ctx, state, opts) {
     videoFolders: folders,
     videoShowFolders: showFolders,
     roots: rootsOut,
-    shows: (shows || []).map(show => ({
+    shows: (shows || []).filter(show => (episodeCounts[String(show?.id || '')] || 0) > 0).map(show => ({
       ...show,
       episodeCount: episodeCounts[String(show?.id || '')] || 0,
     })),
@@ -755,10 +755,10 @@ function readLibraryConfig(ctx) {
  * Write library configuration (shared with library domain).
  * Lifted from Build 78B index.js lines 596-607.
  */
-function writeLibraryConfig(ctx, state) {
+async function writeLibraryConfig(ctx, state) {
   // INTENT: Keep this file small and stable. Heavy index lives in library_index.json.
   const p = ctx.storage.dataPath('library_state.json');
-  ctx.storage.writeJSON(p, {
+  await ctx.storage.writeJSON(p, {
     seriesFolders: Array.isArray(state.seriesFolders) ? state.seriesFolders : [],
     rootFolders: Array.isArray(state.rootFolders) ? state.rootFolders : [],
     ignoredSeries: Array.isArray(state.ignoredSeries) ? state.ignoredSeries : [],
@@ -1140,7 +1140,7 @@ async function scan(ctx, _evt, opts) {
   // Build 103: Manual rescan should restore any previously removed/hidden shows.
   if (Array.isArray(cfg.videoHiddenShowIds) && cfg.videoHiddenShowIds.length) {
     cfg.videoHiddenShowIds = [];
-    writeLibraryConfig(ctx, cfg);
+    await writeLibraryConfig(ctx, cfg);
     // Update renderer immediately so previously hidden shows can reappear if already indexed.
     emitVideoUpdated(ctx);
   }
@@ -1248,7 +1248,7 @@ async function addFolder(ctx, evt) {
     __diagLog(`addFolder: existing videoFolders=${JSON.stringify(state.videoFolders)}`);
     if (!state.videoFolders.includes(folder)) state.videoFolders.unshift(folder);
     __diagLog(`addFolder: updated videoFolders=${JSON.stringify(state.videoFolders)}`);
-    writeLibraryConfig(ctx, state);
+    await writeLibraryConfig(ctx, state);
 
     await ensureVideoIndexLoaded(ctx);
     const snap = makeVideoStateSnapshot(ctx, state, { lite: true });
@@ -1286,8 +1286,19 @@ async function addShowFolder(ctx, evt) {
     const state = readLibraryConfig(ctx);
     state.videoShowFolders = Array.isArray(state.videoShowFolders) ? state.videoShowFolders : [];
     __diagLog(`addShowFolder: existing videoShowFolders=${JSON.stringify(state.videoShowFolders)}`);
+
+    // Skip if this folder is already a child of an existing show folder (already covered by recursive scan)
+    const isChildOfExisting = state.videoShowFolders.some(sf => folder.startsWith(sf + path.sep));
+    if (isChildOfExisting) {
+      __diagLog(`addShowFolder: skipped — already covered by parent show folder`);
+      return { ok: false, reason: 'covered' };
+    }
+
+    // If this folder is a parent of existing show folders, remove the children (parent covers them)
+    state.videoShowFolders = state.videoShowFolders.filter(sf => !sf.startsWith(folder + path.sep));
+
     if (!state.videoShowFolders.includes(folder)) state.videoShowFolders.unshift(folder);
-    writeLibraryConfig(ctx, state);
+    await writeLibraryConfig(ctx, state);
 
     await ensureVideoIndexLoaded(ctx);
     const snap = makeVideoStateSnapshot(ctx, state, { lite: true });
@@ -1315,7 +1326,7 @@ async function removeFolder(ctx, _evt, folderPath) {
   state.videoFolders = state.videoFolders.filter(p => p !== target);
   state.videoShowFolders = Array.isArray(state.videoShowFolders) ? state.videoShowFolders : [];
   state.videoShowFolders = state.videoShowFolders.filter(p => p !== target);
-  writeLibraryConfig(ctx, state);
+  await writeLibraryConfig(ctx, state);
 
   await ensureVideoIndexLoaded(ctx);
   const snap = makeVideoStateSnapshot(ctx, state, { lite: true });
@@ -1337,13 +1348,9 @@ async function hideShow(ctx, _evt, showId) {
   const cfg = readLibraryConfig(ctx);
   cfg.videoHiddenShowIds = Array.isArray(cfg.videoHiddenShowIds) ? cfg.videoHiddenShowIds : [];
   if (!cfg.videoHiddenShowIds.includes(sid)) cfg.videoHiddenShowIds.push(sid);
-  writeLibraryConfig(ctx, cfg);
+  await writeLibraryConfig(ctx, cfg);
 
-  // Filter current index immediately so UI updates without a rescan.
-  const filtered = filterVideoIdxForHiddenShows(videoCache.idx, cfg.videoHiddenShowIds);
-  videoCache.idx = filtered;
-  try { ctx.storage.writeJSON(ctx.storage.dataPath('video_index.json'), videoCache.idx); } catch {}
-
+  // Filtering happens in makeVideoStateSnapshot — keep full index intact for restore.
   emitVideoUpdated(ctx);
   return { ok: true, state: makeVideoStateSnapshot(ctx, cfg) };
 }
@@ -1433,7 +1440,7 @@ async function addFiles(ctx, evt) {
       }
     }
 
-    writeLibraryConfig(ctx, cfg);
+    await writeLibraryConfig(ctx, cfg);
     const snap = makeVideoStateSnapshot(ctx, cfg, { lite: true });
     emitVideoUpdated(ctx);
     return { ok: true, state: snap };
@@ -1449,7 +1456,7 @@ async function removeFile(ctx, _evt, filePath) {
     const cfg = readLibraryConfig(ctx);
     cfg.videoFiles = Array.isArray(cfg.videoFiles) ? cfg.videoFiles : [];
     cfg.videoFiles = cfg.videoFiles.filter(p => String(p || '') !== target);
-    writeLibraryConfig(ctx, cfg);
+    await writeLibraryConfig(ctx, cfg);
     const snap = makeVideoStateSnapshot(ctx, cfg, { lite: true });
     emitVideoUpdated(ctx);
     return { ok: true, state: snap };
@@ -1463,7 +1470,7 @@ async function restoreAllHiddenShows(ctx) {
   try {
     const cfg = readLibraryConfig(ctx);
     cfg.videoHiddenShowIds = [];
-    writeLibraryConfig(ctx, cfg);
+    await writeLibraryConfig(ctx, cfg);
     // Rescan is initiated from renderer (keeps existing scan behavior)
     const snap = makeVideoStateSnapshot(ctx, cfg, { lite: true });
     emitVideoUpdated(ctx);
@@ -1482,7 +1489,7 @@ async function restoreHiddenShowsForRoot(ctx, _evt, rootId) {
     // Added Files pseudo-root: just unhide the pseudo-show id
     if (rid === ADDED_FILES_ROOT_ID) {
       cfg.videoHiddenShowIds = cfg.videoHiddenShowIds.filter(x => String(x || '') !== ADDED_FILES_SHOW_ID);
-      writeLibraryConfig(ctx, cfg);
+      await writeLibraryConfig(ctx, cfg);
       const snap = makeVideoStateSnapshot(ctx, cfg, { lite: true });
       emitVideoUpdated(ctx);
       return { ok: true, state: snap };
@@ -1498,7 +1505,7 @@ async function restoreHiddenShowsForRoot(ctx, _evt, rootId) {
         const showPath = __decodeBase64Url(s);
         return !(showPath && setPaths.has(showPath));
       });
-      writeLibraryConfig(ctx, cfg);
+      await writeLibraryConfig(ctx, cfg);
       const snap = makeVideoStateSnapshot(ctx, cfg, { lite: true });
       emitVideoUpdated(ctx);
       return { ok: true, state: snap };
@@ -1525,7 +1532,7 @@ async function restoreHiddenShowsForRoot(ctx, _evt, rootId) {
     }
 
     cfg.videoHiddenShowIds = keep;
-    writeLibraryConfig(ctx, cfg);
+    await writeLibraryConfig(ctx, cfg);
     const snap = makeVideoStateSnapshot(ctx, cfg, { lite: true });
     emitVideoUpdated(ctx);
     return { ok: true, state: snap };

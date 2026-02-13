@@ -142,7 +142,8 @@ def _safe_mpv_log(level, prefix, text) -> None:
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--file", dest="file_path", required=True)
+    p.add_argument("--file", dest="file_path", default="")
+    p.add_argument("file_pos", nargs="?", default="")
     p.add_argument("--start", dest="start_seconds", type=float, default=0.0)
     p.add_argument("--session", dest="session_id", default="")
     p.add_argument("--progress-file", dest="progress_file", default="")
@@ -3825,6 +3826,12 @@ class PlayerWindow(QMainWindow):
                 osd_duration=2000,
                 # Build 13: Chapters
                 chapters_file='',
+                # Subtitle styling — darker outline for readability (PotPlayer-like)
+                sub_border_size=3,
+                sub_border_color='#FF000000',
+                sub_shadow_offset=1,
+                sub_shadow_color='#80000000',
+                sub_font_size=46,
             )
             
             # Attach to render host
@@ -5514,63 +5521,37 @@ class PlayerWindow(QMainWindow):
                 """
             )
 
-            menu.addAction("Open File…").triggered.connect(self._open_file_dialog)
+            # ── Open File ──
+            menu.addAction("Open File…\tCtrl+O").triggered.connect(self._open_file_dialog)
             menu.addSeparator()
 
+            # ── Playback ──
             playback_m = menu.addMenu("Playback")
             paused = bool(getattr(self._mpv, 'pause', False))
-            playback_m.addAction("Pause" if not paused else "Play").triggered.connect(self._toggle_play_pause)
+            playback_m.addAction(("Pause" if not paused else "Play") + "\tSpace").triggered.connect(self._toggle_play_pause)
             playback_m.addAction("Stop").triggered.connect(lambda: self._mpv.command('stop'))
             playback_m.addAction("Restart from Beginning").triggered.connect(lambda: self._mpv.command('seek', '0', 'absolute'))
-
-            # Seek submenu
+            playback_m.addSeparator()
             seek_m = playback_m.addMenu("Seek")
-            seek_m.addAction("Back 10 seconds").triggered.connect(lambda: self._seek_relative(-10))
-            seek_m.addAction("Back 30 seconds").triggered.connect(lambda: self._seek_relative(-30))
-            seek_m.addAction("Forward 10 seconds").triggered.connect(lambda: self._seek_relative(10))
-            seek_m.addAction("Forward 30 seconds").triggered.connect(lambda: self._seek_relative(30))
+            seek_m.addAction("Back 10s\t\u2190").triggered.connect(lambda: self._seek_relative(-10))
+            seek_m.addAction("Back 30s\tCtrl+\u2190").triggered.connect(lambda: self._seek_relative(-30))
+            seek_m.addAction("Forward 10s\t\u2192").triggered.connect(lambda: self._seek_relative(10))
+            seek_m.addAction("Forward 30s\tCtrl+\u2192").triggered.connect(lambda: self._seek_relative(30))
+            playback_m.addAction("Go to Time…\tG").triggered.connect(self._prompt_goto_time)
 
-            # Speed submenu
-            sp_m = playback_m.addMenu("Speed")
+            # ── Speed ──
+            sp_m = menu.addMenu("Speed")
             for sp in self._speed_presets:
-                a = sp_m.addAction(f"{sp}×")
+                a = sp_m.addAction(f"{sp}\u00d7")
                 a.setCheckable(True)
                 a.setChecked(abs(float(sp) - float(self._speed)) < 1e-6)
                 a.triggered.connect(lambda checked=False, s=sp: self._set_speed(s))
             sp_m.addSeparator()
-            sp_m.addAction("Reset to 1.0×").triggered.connect(lambda: self._set_speed(1.0))
+            sp_m.addAction("Reset to 1.0\u00d7\tZ").triggered.connect(lambda: self._set_speed(1.0))
 
-            # Aspect submenu
-            video_m = menu.addMenu("Video")
-            ar_m = video_m.addMenu("Aspect Ratio")
-            presets = [
-                ("Default", "-1"),
-                ("16:9", "16:9"),
-                ("4:3", "4:3"),
-                ("21:9", "2.33:1"),
-                ("2.35:1", "2.35:1"),
-                ("1:1", "1:1"),
-                ("9:16", "9:16"),
-                ("3:2", "3:2"),
-            ]
-            for label, val in presets:
-                ar_m.addAction(label).triggered.connect(lambda checked=False, v=val: self._set_aspect_ratio(v))
+            menu.addSeparator()
 
-            # Quality (kept, but moved off the HUD bar)
-            q_m = video_m.addMenu("Quality")
-            modes = ["Auto", "Balanced", "High", "Extreme"]
-            cur_mode = str(getattr(self, '_quality_mode', 'Balanced') or 'Balanced')
-            for mname in modes:
-                a = q_m.addAction(mname)
-                a.setCheckable(True)
-                a.setChecked(str(mname) == cur_mode)
-                a.triggered.connect(lambda checked=False, mn=mname: self._set_quality_mode(mn))
-            q_m.addSeparator()
-            q_m.addAction("Cycle").triggered.connect(self._cycle_quality)
-
-            video_m.addAction("Fullscreen").triggered.connect(self._toggle_fullscreen)
-
-            # Audio/Subtitle quick pickers (text labels)
+            # ── Audio ──
             tl = getattr(self._mpv, 'track_list', None) or []
             cur_aid = getattr(self._mpv, 'aid', None)
             cur_sid = getattr(self._mpv, 'sid', None)
@@ -5592,21 +5573,25 @@ class PlayerWindow(QMainWindow):
                             parts.append(lang.upper())
                         if title and ((not lang) or (title.lower() != lang.lower())):
                             parts.append(title)
-                        txt = " · ".join(parts) if parts else f"Track #{tid}"
+                        txt = " \u00b7 ".join(parts) if parts else f"Track #{tid}"
                         a = aud_m.addAction(txt)
                         a.setCheckable(True)
                         a.setChecked(str(tid) == str(cur_aid))
                         a.triggered.connect(lambda checked=False, x=tid: self._select_audio_track(x))
                     except Exception:
                         continue
+            adly_m = audio_m.addMenu("Audio Delay")
+            adly_m.addAction("+0.1s").triggered.connect(lambda: self._nudge_audio_delay(+0.1))
+            adly_m.addAction("\u22120.1s").triggered.connect(lambda: self._nudge_audio_delay(-0.1))
+            adly_m.addAction("Reset").triggered.connect(lambda: self._set_audio_delay(0))
 
+            # ── Subtitles ──
             subtitle_m = menu.addMenu("Subtitles")
             sub_m = subtitle_m.addMenu("Subtitle Track")
             off = sub_m.addAction("Off")
             off.setCheckable(True)
             off.setChecked(cur_sid in (None, 'no', 0, '0', False))
             off.triggered.connect(lambda: self._select_subtitle_track(-1))
-
             sub_tracks = [t for t in tl if isinstance(t, dict) and t.get('type') == 'sub']
             if not sub_tracks:
                 ns = sub_m.addAction("(No subtitles)")
@@ -5622,38 +5607,80 @@ class PlayerWindow(QMainWindow):
                             parts.append(lang.upper())
                         if title and ((not lang) or (title.lower() != lang.lower())):
                             parts.append(title)
-                        txt = " · ".join(parts) if parts else f"Sub #{tid}"
+                        txt = " \u00b7 ".join(parts) if parts else f"Sub #{tid}"
                         a = sub_m.addAction(txt)
                         a.setCheckable(True)
                         a.setChecked(str(tid) == str(cur_sid))
                         a.triggered.connect(lambda checked=False, x=tid: self._select_subtitle_track(x))
                     except Exception:
                         continue
+            subtitle_m.addAction("Load External Subtitle…").triggered.connect(self._load_external_subtitle)
+            subtitle_m.addAction("Toggle Visibility\tAlt+H").triggered.connect(lambda: self._mpv.command("cycle", "sub-visibility"))
+            sdly_m = subtitle_m.addMenu("Subtitle Delay")
+            sdly_m.addAction("+0.1s\t>").triggered.connect(lambda: self._nudge_subtitle_delay(+0.1))
+            sdly_m.addAction("\u22120.1s\t<").triggered.connect(lambda: self._nudge_subtitle_delay(-0.1))
+            sdly_m.addAction("Reset\t/").triggered.connect(lambda: self._set_subtitle_delay(0))
 
-            adv_m = menu.addMenu("Filters / Advanced")
-            info_a = adv_m.addAction("Show Info")
-            info_a.setCheckable(True)
-            info_a.setChecked(bool(getattr(self, '_info_visible', False)))
-            info_a.triggered.connect(self._toggle_info)
+            menu.addSeparator()
 
-            adv_m.addAction("Take Screenshot").triggered.connect(self._take_screenshot)
+            # ── Video ──
+            video_m = menu.addMenu("Video")
+            ar_m = video_m.addMenu("Aspect Ratio")
+            presets = [
+                ("Default", "-1"),
+                ("16:9", "16:9"),
+                ("4:3", "4:3"),
+                ("21:9", "2.33:1"),
+                ("2.35:1", "2.35:1"),
+                ("1:1", "1:1"),
+                ("9:16", "9:16"),
+                ("3:2", "3:2"),
+            ]
+            for label, val in presets:
+                ar_m.addAction(label).triggered.connect(lambda checked=False, v=val: self._set_aspect_ratio(v))
+            q_m = video_m.addMenu("Quality")
+            modes = ["Auto", "Balanced", "High", "Extreme"]
+            cur_mode = str(getattr(self, '_quality_mode', 'Balanced') or 'Balanced')
+            for mname in modes:
+                a = q_m.addAction(mname)
+                a.setCheckable(True)
+                a.setChecked(str(mname) == cur_mode)
+                a.triggered.connect(lambda checked=False, mn=mname: self._set_quality_mode(mn))
+            q_m.addSeparator()
+            q_m.addAction("Cycle").triggered.connect(self._cycle_quality)
 
-            aot = adv_m.addAction("Always on Top")
+            # ── Fullscreen / Always on Top ──
+            fs_label = "Exit Fullscreen\tF" if self.isFullScreen() else "Fullscreen\tF"
+            menu.addAction(fs_label).triggered.connect(self._toggle_fullscreen)
+            aot = menu.addAction("Always on Top")
             aot.setCheckable(True)
             aot.setChecked(bool(getattr(self, '_always_on_top', False)))
             aot.triggered.connect(self._toggle_always_on_top)
 
-            # Playlist
-            playlist_m = menu.addMenu("Playlist")
-            prev_a = playlist_m.addAction("Previous Episode")
+            menu.addSeparator()
+
+            # ── Episode Navigation ──
+            prev_a = menu.addAction("Previous Episode\tP")
             prev_a.setEnabled(self._playlist_index > 0)
             prev_a.triggered.connect(self._prev_episode)
-
-            next_a = playlist_m.addAction("Next Episode")
+            next_a = menu.addAction("Next Episode\tN")
             next_a.setEnabled(self._playlist_index < len(self._playlist) - 1)
             next_a.triggered.connect(self._next_episode)
+            menu.addAction("Playlist…").triggered.connect(self._toggle_playlist_drawer)
 
-            playlist_m.addAction("Playlist…").triggered.connect(self._toggle_playlist_drawer)
+            menu.addSeparator()
+
+            # ── Info / Screenshot ──
+            menu.addAction("Take Screenshot").triggered.connect(self._take_screenshot)
+            info_a = menu.addAction("Show Info")
+            info_a.setCheckable(True)
+            info_a.setChecked(bool(getattr(self, '_info_visible', False)))
+            info_a.triggered.connect(self._toggle_info)
+
+            menu.addSeparator()
+
+            # ── Exit ──
+            menu.addAction("Exit\tBackspace").triggered.connect(self._on_back)
 
             menu.exec(global_pos)
 
@@ -6120,7 +6147,10 @@ def _apply_taskbar_icon(w: QMainWindow, icon: QIcon, tries: int = 0) -> None:
 def main() -> int:
     """Build 13 main entry point."""
     a = parse_args()
-    
+
+    # Merge positional file arg with --file flag
+    a.file_path = a.file_path or getattr(a, "file_pos", "") or ""
+
     # Windows: set explicit AppUserModelID so the taskbar groups/icons correctly
     if sys.platform.startswith("win"):
         try:
@@ -6135,6 +6165,18 @@ def main() -> int:
         app.setApplicationDisplayName("Tankoban Player")
     except Exception:
         pass
+
+    # Standalone launch: no file given → show file picker
+    if not a.file_path:
+        fp, _ = QFileDialog.getOpenFileName(
+            None,
+            "Open video",
+            "",
+            "Video Files (*.mp4 *.mkv *.avi *.mov *.m4v *.webm *.ts *.m2ts *.wmv *.flv *.mpeg *.mpg *.3gp);;All Files (*.*)",
+        )
+        if not fp:
+            return 0
+        a.file_path = fp
 
     # Single-instance IPC (Qt local socket/server). If another player is running in this session,
     # send it the open command and exit immediately.

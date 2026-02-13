@@ -151,10 +151,10 @@ function readLibraryConfig(ctx) {
  * Write library configuration.
  * Lifted from Build 78B index.js lines 596-607.
  */
-function writeLibraryConfig(ctx, state) {
+async function writeLibraryConfig(ctx, state) {
   // INTENT: Keep this file small and stable. Heavy index lives in library_index.json.
   const p = ctx.storage.dataPath('library_state.json');
-  ctx.storage.writeJSON(p, {
+  await ctx.storage.writeJSON(p, {
     seriesFolders: Array.isArray(state.seriesFolders) ? state.seriesFolders : [],
     rootFolders: Array.isArray(state.rootFolders) ? state.rootFolders : [],
     ignoredSeries: Array.isArray(state.ignoredSeries) ? state.ignoredSeries : [],
@@ -496,7 +496,7 @@ async function setScanIgnore(ctx, _evt, patterns) {
   }
 
   state.scanIgnore = out;
-  writeLibraryConfig(ctx, state);
+  await writeLibraryConfig(ctx, state);
 
   const snap = makeLibraryStateSnapshot(ctx, state);
   startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
@@ -522,7 +522,7 @@ async function addRootFolder(ctx, evt) {
 
   const state = readLibraryConfig(ctx);
   if (!state.rootFolders.includes(root)) state.rootFolders.unshift(root);
-  writeLibraryConfig(ctx, state);
+  await writeLibraryConfig(ctx, state);
 
   const snap = makeLibraryStateSnapshot(ctx, state);
   startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
@@ -544,7 +544,7 @@ async function removeRootFolder(ctx, _evt, rootPath) {
 
   const state = readLibraryConfig(ctx);
   state.rootFolders = state.rootFolders.filter(r => r !== root);
-  writeLibraryConfig(ctx, state);
+  await writeLibraryConfig(ctx, state);
 
   // Defer orphan pruning until the new index is known (post-scan).
   libraryCache.pendingPruneProgress = true;
@@ -572,7 +572,7 @@ async function addSeriesFolder(ctx, evt) {
 
   const state = readLibraryConfig(ctx);
   if (!state.seriesFolders.includes(folder)) state.seriesFolders.unshift(folder);
-  writeLibraryConfig(ctx, state);
+  await writeLibraryConfig(ctx, state);
 
   const snap = makeLibraryStateSnapshot(ctx, state);
   startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
@@ -619,7 +619,7 @@ async function removeSeriesFolder(ctx, _evt, folder) {
     if (changed) ctx.storage.writeJSONDebounced(ctx.storage.dataPath('progress.json'), all, 50);
   } catch {}
 
-  writeLibraryConfig(ctx, state);
+  await writeLibraryConfig(ctx, state);
 
   // Also prune orphans after we have the new index (post-scan).
   libraryCache.pendingPruneProgress = true;
@@ -639,7 +639,7 @@ async function unignoreSeries(ctx, _evt, folder) {
 
   const state = readLibraryConfig(ctx);
   state.ignoredSeries = state.ignoredSeries.filter(x => x !== target);
-  writeLibraryConfig(ctx, state);
+  await writeLibraryConfig(ctx, state);
 
   const snap = makeLibraryStateSnapshot(ctx, state);
   startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
@@ -654,7 +654,7 @@ async function unignoreSeries(ctx, _evt, folder) {
 async function clearIgnoredSeries(ctx) {
   const state = readLibraryConfig(ctx);
   state.ignoredSeries = [];
-  writeLibraryConfig(ctx, state);
+  await writeLibraryConfig(ctx, state);
 
   const snap = makeLibraryStateSnapshot(ctx, state);
   startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });

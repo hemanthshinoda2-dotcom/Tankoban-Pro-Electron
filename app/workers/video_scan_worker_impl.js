@@ -175,6 +175,7 @@ async function buildVideoIndex(videoFolders, showFolders) {
   const roots = [];
   const shows = [];
   const episodes = [];
+  const seenShowPaths = new Set();  // Prevent same show scanned in both phases
 
   const ignoreCfg = makeIgnoreConfig(workerData.ignore || null);
   const inFolders = Array.isArray(videoFolders) ? videoFolders : [];
@@ -217,6 +218,7 @@ async function buildVideoIndex(videoFolders, showFolders) {
         folders: [],
       };
       shows.push(showObj);
+      seenShowPaths.add(sp);
 
       // Build folder groups while scanning.
       const folderMap = new Map(); // folderKey -> { folderKey, folderRelPath, episodeCount, watchedCount, inProgressCount, percentComplete }
@@ -404,6 +406,16 @@ async function buildVideoIndex(videoFolders, showFolders) {
       const stDir = statSafe(sp);
       if (!stDir || !stDir.isDirectory()) continue;
 
+      // Dedup: skip if already scanned under a root folder (PHASE 1)
+      if (seenShowPaths.has(sp)) { done++; continue; }
+
+      // Dedup: skip if this is a subfolder of an already-scanned show
+      let isNested = false;
+      for (const other of seenShowPaths) {
+        if (sp.startsWith(other + path.sep)) { isNested = true; break; }
+      }
+      if (isNested) { done++; continue; }
+
       const sid = showIdForPath(sp);
       if (HIDDEN_SHOW_IDS.has(String(sid))) {
         done++;
@@ -426,6 +438,7 @@ async function buildVideoIndex(videoFolders, showFolders) {
         folders: [],
       };
       shows.push(showObj);
+      seenShowPaths.add(sp);
 
       const folderMap = new Map();
       const files = listVideoFilesRecursive(sp, ignoreCfg);
