@@ -5809,7 +5809,7 @@ class PlayerWindow(QMainWindow):
                 return True
             
             # Play/pause
-            if key in (Qt.Key.Key_Space, Qt.Key.Key_K):
+            if key == Qt.Key.Key_Space:
                 self._toggle_play_pause()
                 return True
             
