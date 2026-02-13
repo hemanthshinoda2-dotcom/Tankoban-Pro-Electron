@@ -2,7 +2,7 @@
   "name": "manga-scroller",
   "version": "0.1.31",
   "private": true,
-  "description": "Tankoban Plus — Build 87 (Video Performance + Context Menu + Chapters)",
+  "description": "Tankoban Pro — Build 87 (Video Performance + Context Menu + Chapters)",
   "main": "main.js",
   "scripts": {
     "prestart": "..\\scripts\\windows\\ensure_mpv_windows.bat",
@@ -28,7 +28,7 @@
   },
   "build": {
     "appId": "com.hemanth.mangascroller",
-    "productName": "Tankoban Plus",
+    "productName": "Tankoban Pro",
     "directories": {
       "output": "dist"
     },
@@ -104,5 +104,5 @@
   "dependencies": {
     "node-unrar-js": "^2.0.2"
   },
-  "productName": "Tankoban Plus"
+  "productName": "Tankoban Pro"
 }

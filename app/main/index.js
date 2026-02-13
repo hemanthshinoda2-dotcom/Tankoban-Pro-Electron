@@ -150,6 +150,7 @@ function pickUserDataDir() {
 
   // Common historical / user-facing names
   add(path.join(baseDir, 'Tankoban'));
+  add(path.join(baseDir, 'Tankoban Pro'));
   add(path.join(baseDir, 'Tankoban Plus'));
   add(path.join(baseDir, 'TankobanPlus'));
   add(path.join(baseDir, 'manga-scroller'));

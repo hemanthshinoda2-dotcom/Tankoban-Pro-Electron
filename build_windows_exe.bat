@@ -8,7 +8,7 @@ REM - Handles common Windows edge cases
 REM - Provides clear guidance on failures
 
 echo ========================================
-echo Tankoban Plus Build Script - Build 72
+echo Tankoban Pro Build Script - Build 72
 echo ========================================
 echo.
 
@@ -243,8 +243,8 @@ if !BUILD_RESULT! equ 0 (
   echo ========================================
   echo.
   echo Output files are in the "dist" folder:
-  echo - Tankoban Plus installer ^(NSIS .exe^)
-  echo - Tankoban Plus portable ^(.exe^)
+  echo - Tankoban Pro installer ^(NSIS .exe^)
+  echo - Tankoban Pro portable ^(.exe^)
   echo.
   echo The build process completed successfully.
   echo.
