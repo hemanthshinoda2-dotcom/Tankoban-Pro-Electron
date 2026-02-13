@@ -41,6 +41,7 @@
       "preload/**/*",
       "shared/**/*",
       "resources/**/*",
+      "!resources/mpv/**/*",
       "build/**/*",
       "src/**/*",
       "package.json"

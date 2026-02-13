@@ -12,8 +12,7 @@ const requiredPaths = [
   path.join(playerRoot, 'TankobanPlayer.exe'),
   internalRoot,
   path.join(internalRoot, 'base_library.zip'),
-  path.join(internalRoot, 'python3.dll'),
-  path.join(internalRoot, 'python312.dll')
+  path.join(internalRoot, 'python3.dll')
 ];
 
 function findMatches(pattern) {
@@ -32,6 +31,7 @@ function findMatches(pattern) {
 }
 
 const wildcardRequirements = [
+  path.join(internalRoot, 'python3*.dll'),
   path.join(internalRoot, '*.dll'),
   path.join(internalRoot, '*.pyd')
 ];
