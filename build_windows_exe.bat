@@ -13,7 +13,7 @@ REM - Handles common Windows edge cases
 REM - Provides clear guidance on failures
 
 echo ========================================
-echo Tankoban Pro Build Script - Build 72
+echo Tankoban Pro One-Click Build Pipeline
 echo ========================================
 echo.
 
@@ -79,53 +79,51 @@ echo.
 REM Change to app directory - critical first step
 cd /d "%~dp0app" 2>nul
 if errorlevel 1 (
-  echo ERROR: Could not change to app directory
-  echo Expected path: %~dp0app
-  echo Current directory: %CD%
   echo.
-  echo Press any key to close...
-  pause >nul
+  echo ERROR: Unsupported Python version detected. Tankoban requires Python 3.9+.
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  pause
   exit /b 1
 )
 
-echo Working directory: %CD%
-echo.
+echo [2/8] Installing Qt player dependencies...
+call "%REPO_ROOT%app\player_qt\install_windows.bat" --non-interactive
+if errorlevel 1 (
+  echo.
+  echo ERROR: Qt player dependency setup failed.
+  echo Remediation: Verify Python 3.9+, pip health, and internet access.
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  pause
+  exit /b 1
+)
 
 REM Check Node.js availability
 echo [3/8] Checking Node.js...
 where node >nul 2>nul
 if errorlevel 1 (
   echo.
-  echo ERROR: Node.js is not installed or not in PATH
-  echo.
-  echo Please install Node.js LTS from: https://nodejs.org/
-  echo After installation, restart your terminal and run this script again.
-  echo.
-  echo Press any key to close...
-  pause >nul
+  echo ERROR: Node.js is not installed or not in PATH.
+  echo Install Node.js LTS from https://nodejs.org/
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  pause
   exit /b 1
 )
-
-REM Show Node version for diagnostics
-for /f "tokens=*" %%i in ('node --version 2^>nul') do set NODE_VERSION=%%i
-echo Found Node.js: !NODE_VERSION!
-
-REM Check npm availability
 where npm >nul 2>nul
 if errorlevel 1 (
   echo.
-  echo ERROR: npm is not available
-  echo Node.js is installed but npm was not found.
-  echo This is unusual - try reinstalling Node.js.
-  echo.
-  echo Press any key to close...
-  pause >nul
+  echo ERROR: npm is not installed or not in PATH.
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  pause
   exit /b 1
 )
 
-for /f "tokens=*" %%i in ('npm --version 2^>nul') do set NPM_VERSION=%%i
-echo Found npm: !NPM_VERSION!
-echo.
+cd /d "%APP_DIR%"
+if errorlevel 1 (
+  echo ERROR: Could not change to app directory.
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  pause
+  exit /b 1
+)
 
 REM Ensure mpv runtime files are present (not committed due GitHub 100MB limit)
 echo [4/8] Ensuring MPV runtime binaries...
@@ -133,12 +131,8 @@ call "%~dp0scripts\windows\ensure_mpv_windows.bat"
 if errorlevel 1 (
   echo.
   echo ERROR: MPV runtime setup failed.
-  echo.
-  echo Required files were not found and automatic download failed.
-  echo Check your internet connection and retry.
-  echo.
-  echo Press any key to close...
-  pause >nul
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  pause
   exit /b 1
 )
 echo.
@@ -169,30 +163,17 @@ for /f "tokens=2" %%i in ('tasklist /FI "IMAGENAME eq electron.exe" /FO CSV /NH 
 REM Small delay to let file handles release
 timeout /t 2 /nobreak >nul 2>&1
 
+echo [5/8] Installing Node dependencies...
 if exist package-lock.json (
-  echo Found package-lock.json - attempting clean install with npm ci...
-  call npm ci 2>&1
-  if !errorlevel! equ 0 (
-    set INSTALL_SUCCESS=1
-    goto INSTALL_DONE
-  )
-  
-  echo npm ci failed (error code: !errorlevel!). Checking error type...
-  
-  REM Check if it's an EBUSY error by looking for specific error patterns
-  REM EBUSY errors typically mention "resource busy or locked" or "EBUSY"
-  
-  if %INSTALL_ATTEMPTS% lss %MAX_ATTEMPTS% (
-    echo This may be a file lock issue (EBUSY/EPERM). Retrying...
-    echo Waiting 3 seconds before retry...
-    timeout /t 3 /nobreak >nul 2>&1
-    goto INSTALL_RETRY
-  ) else (
-    echo npm ci failed after %MAX_ATTEMPTS% attempts. Trying npm install as fallback...
-    call npm install 2>&1
-    if !errorlevel! equ 0 (
-      set INSTALL_SUCCESS=1
-      goto INSTALL_DONE
+  call npm ci
+  if errorlevel 1 (
+    echo npm ci failed; retrying with npm install...
+    call npm install
+    if errorlevel 1 (
+      echo ERROR: npm dependency install failed.
+      if "%NON_INTERACTIVE%"=="1" exit /b 1
+      pause
+      exit /b 1
     )
   )
 ) else (
@@ -252,42 +233,35 @@ if errorlevel 1 (
   echo electron-builder not found in dependencies. Installing it now...
   call npm install --save-dev electron-builder
   if errorlevel 1 (
-    echo.
-    echo ERROR: Failed to install electron-builder
-    echo.
-    echo This is required to build the Windows executable.
-    echo Check the error messages above for details.
-    echo.
-    echo Press any key to close...
-    pause >nul
+    echo ERROR: npm dependency install failed.
+    if "%NON_INTERACTIVE%"=="1" exit /b 1
+    pause
     exit /b 1
   )
-  echo electron-builder installed successfully.
-) else (
-  echo electron-builder is available.
 )
 echo.
 
 REM Check for known Windows build issues
 echo [7/8] Checking for common Windows build issues...
 
-REM Check if running as admin (helps with symlink issues)
-net session >nul 2>&1
+echo [6/8] Building TankobanPlayer.exe...
+call npm run build:player
 if errorlevel 1 (
-  echo Note: Not running as Administrator.
-  echo If build fails with "symlink" or "winCodeSign" errors, try running as Admin.
-) else (
-  echo Running with Administrator privileges.
+  echo.
+  echo ERROR: Player build failed.
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  pause
+  exit /b 1
 )
 
-REM Check for Developer Mode (helps with symlinks on Windows 10+)
-reg query "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /v AllowDevelopmentWithoutDevLicense >nul 2>&1
+echo [7/8] Validating player build artifacts...
+call npm run validate:player
 if errorlevel 1 (
-  echo Note: Developer Mode is not enabled.
-  echo If build fails with symlink errors, consider enabling Developer Mode:
-  echo   Settings ^> Update ^& Security ^> For Developers ^> Developer Mode
-) else (
-  echo Developer Mode is enabled.
+  echo.
+  echo ERROR: Player validation failed.
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  pause
+  exit /b 1
 )
 echo.
 
@@ -297,56 +271,23 @@ echo [build] Using npm run dist ^(release:prep -> build:player -> validate:playe
 echo This may take several minutes. Please wait...
 echo.
 
+echo [8/8] Building Electron distributables...
 call npm run dist
-set BUILD_RESULT=!errorlevel!
-
-echo.
-if !BUILD_RESULT! equ 0 (
-  echo ========================================
-  echo BUILD SUCCESSFUL!
-  echo ========================================
+if errorlevel 1 (
   echo.
-  echo Output files are in the "dist" folder:
-  echo - Tankoban Pro installer ^(NSIS .exe^)
-  echo - Tankoban Pro portable ^(.exe^)
-  echo.
-  echo The build process completed successfully.
-  echo.
+  echo ERROR: npm run dist failed.
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
   pause
-  exit /b 0
-) else (
-  echo ========================================
-  echo BUILD FAILED
-  echo ========================================
-  echo.
-  echo Exit code: !BUILD_RESULT!
-  echo.
-  echo Review the error messages above for details.
-  echo.
-  echo Common issues and solutions:
-  echo.
-  echo 1. "winCodeSign" or "symlink" errors:
-  echo    - Run this script as Administrator
-  echo    - Enable Windows Developer Mode
-  echo    - Or disable code signing in package.json if not distributing
-  echo.
-  echo 2. "EPERM" or "ENOTEMPTY" errors:
-  echo    - Close all editors, terminals, and file explorers
-  echo    - Delete the "dist" and "node_modules" folders
-  echo    - Run this script again
-  echo.
-  echo 3. Network or download errors:
-  echo    - Check your internet connection
-  echo    - Check if antivirus is blocking downloads
-  echo    - Retry the build
-  echo.
-  echo 4. "electron-builder" errors:
-  echo    - Ensure you're using a current version of Node.js LTS
-  echo    - Try: npm install --save-dev electron-builder@latest
-  echo.
-  echo Press any key to close...
-  pause >nul
-  exit /b !BUILD_RESULT!
+  exit /b 1
 )
 
-endlocal
+echo.
+echo ========================================
+echo BUILD SUCCESSFUL
+echo ========================================
+echo Dist output: app\dist
+
+echo.
+if "%NON_INTERACTIVE%"=="1" exit /b 0
+pause
+exit /b 0
