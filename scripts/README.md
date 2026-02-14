@@ -9,7 +9,7 @@ Important: this packaged build also keeps copies of the same Windows batch files
 ## scripts/windows/
 
 - `install_and_run.bat` — installs dependencies (when required) and launches the app
-- `build_windows_exe.bat` — packaging helper for a Windows executable build
+- `build_windows_exe.bat` — one-click bootstrap + packaging helper (Python/Qt deps, Node deps, player build, and dist)
 
 ## Editing guide
 

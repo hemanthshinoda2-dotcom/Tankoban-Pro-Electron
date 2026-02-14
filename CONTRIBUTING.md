@@ -19,10 +19,10 @@ If you only want to use the app, follow the [User Release Guide](docs/USER_RELEA
 
 From repository root:
 
-1. Install and run locally:
-   - `install_and_run.bat`
-2. Build distributables:
+1. One-click bootstrap + package build (dependencies + Qt player + dist):
    - `build_windows_exe.bat`
+2. Install and run locally in dev mode:
+   - `install_and_run.bat`
 
 These scripts download MPV runtime files into `app/resources/mpv/windows` when missing.
 
