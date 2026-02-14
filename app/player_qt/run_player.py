@@ -3827,10 +3827,10 @@ class PlayerWindow(QMainWindow):
                 # Build 13: Chapters
                 chapters_file='',
                 # Subtitle styling — darker outline for readability (PotPlayer-like)
-                sub_border_size=3,
+                sub_border_size=4,
                 sub_border_color='#FF000000',
-                sub_shadow_offset=1,
-                sub_shadow_color='#80000000',
+                sub_shadow_offset=1.5,
+                sub_shadow_color='#B0000000',
                 sub_font_size=46,
             )
             

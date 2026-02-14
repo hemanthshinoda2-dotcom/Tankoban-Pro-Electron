@@ -1,4 +1,4 @@
-# Node and build output
+﻿# Node and build output
 app/node_modules/
 app/dist/
 app/out/
@@ -15,3 +15,9 @@ app/player_qt/__pycache__/
 app/resources/mpv/windows/*
 !app/resources/mpv/windows/.gitkeep
 !app/resources/mpv/windows/README.md
+
+# Tankoban Max artifacts
+projects/Tankoban Max/node_modules/
+projects/Tankoban Max/dist/
+projects/Tankoban Max/out/
+projects/Tankoban Max/release/
