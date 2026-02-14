@@ -132,6 +132,9 @@ const CHANNEL = {
   /** Start video library scan. Returns: void */
   VIDEO_SCAN: 'video:scan',
 
+  /** Rescan a single show by its folder path. Returns: { ok: boolean } */
+  VIDEO_SCAN_SHOW: 'video:scan-show',
+
   /** Generate auto thumbnail for a specific show. Returns: { ok, generated, reason?, path? } */
   VIDEO_GENERATE_SHOW_THUMBNAIL: 'video:generateShowThumbnail',
   

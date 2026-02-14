@@ -718,11 +718,11 @@ episodeCounts,
  * Emit video updated event to renderer.
  * Lifted from Build 78B index.js lines 449-451.
  */
-function emitVideoUpdated(ctx) {
+function emitVideoUpdated(ctx, opts = {}) {
   const w = ctx.win;
   __diagLog(`emitVideoUpdated: ctx.win=${w ? 'BrowserWindow' : 'null'}, webContents=${w?.webContents ? 'yes' : 'no'}`);
   try {
-    const snap = makeVideoStateSnapshot(ctx, undefined, { lite: true });
+    const snap = makeVideoStateSnapshot(ctx, undefined, { lite: !opts.full });
     __diagLog(`emitVideoUpdated: snap.roots=${snap?.roots?.length}, snap.shows=${snap?.shows?.length}, snap.episodes=${snap?.episodes?.length}, error=${snap?.error || 'none'}, scanning=${snap?.scanning}`);
     ctx.win?.webContents?.send(ctx.EVENT.VIDEO_UPDATED, snap);
   } catch (e) { __diagLog(`emitVideoUpdated ERROR: ${e.message}`); }
@@ -913,7 +913,7 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
           }
         } catch {}
 
-        emitVideoUpdated(ctx);
+        emitVideoUpdated(ctx, { full: true });  // Show all episodes after scan
         finish(true);
       })();
       return;
@@ -924,7 +924,7 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
     __diagLog(`scan WORKER ERROR: ${err?.message || err}\n${err?.stack || ''}`);
     if (myScanId !== videoCache.scanId) return;
     videoCache.error = String(err?.message || err);
-    emitVideoUpdated(ctx);
+    emitVideoUpdated(ctx, { full: true });  // Show all episodes even after error
     finish(false);
   });
 
@@ -933,7 +933,7 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
     if (myScanId !== videoCache.scanId) return;
     if (code !== 0) {
       videoCache.error = `Video scan worker exited ${code}`;
-      emitVideoUpdated(ctx);
+      emitVideoUpdated(ctx, { full: true });  // Show all episodes even after error
       finish(false);
     } else {
       // code 0 but no 'done' message = silent failure
@@ -1147,6 +1147,38 @@ async function scan(ctx, _evt, opts) {
   const folders = Array.isArray(cfg.videoFolders) ? cfg.videoFolders : [];
   const showFolders = Array.isArray(cfg.videoShowFolders) ? cfg.videoShowFolders : [];
   startVideoScan(ctx, folders, showFolders, { force: true });
+  return { ok: true };
+}
+
+/**
+ * Rescan a single show by its show folder path.
+ * BUILD FIX: Add rescan show feature.
+ */
+async function scanShow(ctx, _evt, showPath) {
+  const sp = String(showPath || '');
+  if (!sp) return { ok: false };
+
+  const cfg = readLibraryConfig(ctx);
+
+  // Determine if this show is in videoFolders (root child) or videoShowFolders (explicit)
+  const isInShowFolders = (cfg.videoShowFolders || []).includes(sp);
+
+  if (isInShowFolders) {
+    // Rescan as a single show folder
+    startVideoScan(ctx, [], [sp], { force: true });
+  } else {
+    // Try to find parent root folder
+    const rootFolders = cfg.videoFolders || [];
+    const parentRoot = rootFolders.find(rf => sp.startsWith(rf + path.sep));
+
+    if (parentRoot) {
+      // Rescan the entire root folder (could optimize to just this show, but requires worker changes)
+      startVideoScan(ctx, [parentRoot], [], { force: true });
+    } else {
+      return { ok: false, reason: 'not_found' };
+    }
+  }
+
   return { ok: true };
 }
 
@@ -1473,7 +1505,7 @@ async function restoreAllHiddenShows(ctx) {
     await writeLibraryConfig(ctx, cfg);
     // Rescan is initiated from renderer (keeps existing scan behavior)
     const snap = makeVideoStateSnapshot(ctx, cfg, { lite: true });
-    emitVideoUpdated(ctx);
+    emitVideoUpdated(ctx, { full: true });  // Show all episodes when restoring
     return { ok: true, state: snap };
   } catch {
     return { ok: false };
@@ -1507,7 +1539,7 @@ async function restoreHiddenShowsForRoot(ctx, _evt, rootId) {
       });
       await writeLibraryConfig(ctx, cfg);
       const snap = makeVideoStateSnapshot(ctx, cfg, { lite: true });
-      emitVideoUpdated(ctx);
+      emitVideoUpdated(ctx, { full: true });  // Show all episodes when restoring
       return { ok: true, state: snap };
     }
 
@@ -1547,6 +1579,7 @@ module.exports = {
   getEpisodesForShow,
   getEpisodesForRoot,
   scan,
+  scanShow,
   generateShowThumbnail,
   cancelScan,
   addFolder,

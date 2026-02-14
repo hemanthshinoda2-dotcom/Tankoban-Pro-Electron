@@ -134,6 +134,8 @@ const api = {
   // TRACE:IPC_OUT ipcRenderer.invoke @ index.js
     scan: (opts) => ipcRenderer.invoke(CHANNEL.VIDEO_SCAN, opts),
   // TRACE:IPC_OUT ipcRenderer.invoke @ index.js
+    scanShow: (showPath) => ipcRenderer.invoke(CHANNEL.VIDEO_SCAN_SHOW, showPath),
+  // TRACE:IPC_OUT ipcRenderer.invoke @ index.js
     generateShowThumbnail: (showId, opts) => ipcRenderer.invoke(CHANNEL.VIDEO_GENERATE_SHOW_THUMBNAIL, showId, opts),
   // TRACE:IPC_OUT ipcRenderer.invoke @ index.js
     cancelScan: () => ipcRenderer.invoke(CHANNEL.VIDEO_CANCEL_SCAN),

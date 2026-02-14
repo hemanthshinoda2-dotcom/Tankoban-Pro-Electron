@@ -3412,6 +3412,16 @@ function ensureContinueEpisodesLoaded() {
         // openVideoShow already persists, but keep the tree state sticky
         persistVideoUiState();
       });
+
+      // BUILD FIX: Add context menu to sidebar shows
+      srow.addEventListener('contextmenu', (e) => {
+        const t = e.target;
+        const tag = (t && t.tagName) ? String(t.tagName).toLowerCase() : '';
+        if (tag === 'input' || tag === 'textarea' || tag === 'select' || (t && t.isContentEditable)) return;
+
+        openShowSidebarContextMenu(e, sh);
+      });
+
       el.videoFoldersList.appendChild(srow);
     }
   }
@@ -4693,6 +4703,62 @@ function getEpisodeById(epId){
         label: 'Generate auto thumbnail',
         disabled: (typeof Tanko?.api?.video?.generateShowThumbnail !== 'function') || eps.length === 0,
         onClick: () => { safe(() => generateAutoThumbnailForShow(sid)); },
+      },
+      { separator: true },
+      {
+        label: 'Remove show from library…',
+        danger: true,
+        onClick: () => { safe(() => removeShowFromLibrary(show)); },
+      },
+    ]);
+  }
+
+  /**
+   * Context menu for shows in the sidebar (under root folders).
+   * BUILD FIX: Add rescan show feature.
+   */
+  function openShowSidebarContextMenu(e, show) {
+    const sid = show && show.id ? String(show.id) : '';
+    const showPath = show && show.path ? String(show.path) : '';
+    if (!sid || !showPath) return;
+
+    const eps = sid ? (state.episodesByShowId?.get?.(sid) || []) : [];
+
+    openCtxMenu(e, [
+      {
+        label: 'Open',
+        onClick: () => {
+          openVideoShow(sid);
+        },
+      },
+      {
+        label: 'Rescan this show',
+        onClick: async () => {
+          try {
+            await Tanko.api.video.scanShow(showPath);
+            toast('Refreshing show…');
+          } catch (err) {
+            console.error('Failed to rescan show:', err);
+            toast('Rescan failed', 2000);
+          }
+        },
+      },
+      { separator: true },
+      {
+        label: 'Reveal in File Explorer',
+        disabled: (typeof Tanko?.api?.shell?.revealPath !== 'function'),
+        onClick: async () => {
+          try { await Tanko.api.shell.revealPath(showPath); } catch {}
+        },
+      },
+      {
+        label: 'Copy path',
+        onClick: () => {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(showPath);
+            toast('Path copied', 1200);
+          }
+        },
       },
       { separator: true },
       {
