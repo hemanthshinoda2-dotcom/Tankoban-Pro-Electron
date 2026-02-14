@@ -8,7 +8,7 @@ if /I "%TANKOBAN_NON_INTERACTIVE%"=="1" set "NON_INTERACTIVE=1"
 REM Tankoban Qt Player installer (Pro V2)
 REM Creates a venv and installs dependencies.
 
-cd /d %~dp0
+cd /d "%~dp0"
 
 set "PYTHON_EXE="
 set "PYTHON_ARGS="
@@ -53,7 +53,7 @@ if not exist .venv (
   )
 )
 
-call .venv\Scripts\activate.bat
+call ".venv\Scripts\activate.bat"
 if errorlevel 1 (
   echo ERROR: Failed to activate .venv\Scripts\activate.bat.
   echo Remediation: Delete app\player_qt\.venv and rerun install_and_run.bat.

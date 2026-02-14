@@ -22,7 +22,7 @@ if %errorlevel%==0 (
 if "%PY_CMD%"=="" (
   echo [player] ERROR: Python was not found on PATH.
   REM NOTE: Avoid unescaped parentheses inside parenthesized blocks (cmd.exe parser gotcha)
-  echo [player] Install Python 3.10+ or the "py" launcher, then re-run the build.
+  echo [player] Install Python 3.9+ or the "py" launcher, then re-run the build.
   exit /b 1
 )
 
@@ -43,12 +43,12 @@ if "%PY_MAJ%"=="" (
 )
 
 if %PY_MAJ% LSS 3 (
-  echo [player] ERROR: Python 3.10+ is required, found %PY_VERSION%.
+  echo [player] ERROR: Python 3.9+ is required, found %PY_VERSION%.
   exit /b 1
 )
 
-if %PY_MAJ% EQU 3 if %PY_MIN% LSS 10 (
-  echo [player] ERROR: Python 3.10+ is required, found %PY_VERSION%.
+if %PY_MAJ% EQU 3 if %PY_MIN% LSS 9 (
+  echo [player] ERROR: Python 3.9+ is required, found %PY_VERSION%.
   exit /b 1
 )
 
@@ -102,10 +102,22 @@ if "%PYINSTALLER_VERSION%"=="" (
 )
 echo [player] PyInstaller: %PYINSTALLER_VERSION%
 
+set "PLAYER_DIST_DIR=dist\TankobanPlayer"
+set "PLAYER_EXE=%PLAYER_DIST_DIR%\TankobanPlayer.exe"
+if exist "%PLAYER_DIST_DIR%" (
+  echo [player] removing previous output: %PLAYER_DIST_DIR%
+  rmdir /s /q "%PLAYER_DIST_DIR%" >nul 2>nul
+  if exist "%PLAYER_DIST_DIR%" (
+    echo [player] ERROR: could not remove old output directory: %PLAYER_DIST_DIR%
+    echo [player] Close any running TankobanPlayer.exe process and retry.
+    exit /b 1
+  )
+)
+
 echo [player] building (PyInstaller)
 REM The player only uses QtCore, QtGui, QtWidgets, QtNetwork.
 REM Exclude all other PySide6 modules to reduce bundle size (~100-150 MB savings).
-pyinstaller --noconsole --onedir --clean --name TankobanPlayer ^
+pyinstaller -y --noconsole --onedir --clean --name TankobanPlayer ^
   --exclude-module PySide6.QtWebEngine ^
   --exclude-module PySide6.QtWebEngineCore ^
   --exclude-module PySide6.QtWebEngineWidgets ^
@@ -150,8 +162,6 @@ if errorlevel 1 (
   exit /b 1
 )
 
-set "PLAYER_DIST_DIR=dist\TankobanPlayer"
-set "PLAYER_EXE=%PLAYER_DIST_DIR%\TankobanPlayer.exe"
 if not exist "%PLAYER_EXE%" (
   echo [player] ERROR: expected artifact missing: %PLAYER_EXE%
   exit /b 1

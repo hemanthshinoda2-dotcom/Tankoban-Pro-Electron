@@ -6,22 +6,70 @@ if /I "%~1"=="--non-interactive" set "NON_INTERACTIVE=1"
 if /I "%~1"=="--ci" set "NON_INTERACTIVE=1"
 if /I "%TANKOBAN_NON_INTERACTIVE%"=="1" set "NON_INTERACTIVE=1"
 
-REM BUILD72: Robust Windows build script
-REM - Always keeps console open on any failure
-REM - Shows full error messages with context
-REM - Handles common Windows edge cases
-REM - Provides clear guidance on failures
-
 echo ========================================
-echo Tankoban Pro One-Click Build Pipeline
+echo Tankoban Pro Build Script
 echo ========================================
 echo.
 
-REM BUILD91: Preflight Python + Qt player dependency bootstrap
+REM Change to app directory.
+cd /d "%~dp0app" 2>nul
+if errorlevel 1 (
+  echo ERROR: Could not change to app directory.
+  echo Expected path: %~dp0app
+  echo Current directory: %CD%
+  echo.
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  echo Press any key to close...
+  pause >nul
+  exit /b 1
+)
+
+echo Working directory: %CD%
+echo.
+
+if not exist "package.json" (
+  echo ERROR: package.json was not found in the app directory.
+  echo Expected path: %CD%\package.json
+  echo.
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  echo Press any key to close...
+  pause >nul
+  exit /b 1
+)
+
+echo [1/7] Checking Node.js...
+where node >nul 2>nul
+if errorlevel 1 (
+  echo.
+  echo ERROR: Node.js is not installed or not in PATH.
+  echo Install Node.js LTS from https://nodejs.org/
+  echo.
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  echo Press any key to close...
+  pause >nul
+  exit /b 1
+)
+for /f "tokens=*" %%i in ('node --version 2^>nul') do set "NODE_VERSION=%%i"
+echo Found Node.js: !NODE_VERSION!
+
+where npm >nul 2>nul
+if errorlevel 1 (
+  echo.
+  echo ERROR: npm is not available.
+  echo Reinstall Node.js LTS and retry.
+  echo.
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  echo Press any key to close...
+  pause >nul
+  exit /b 1
+)
+for /f "tokens=*" %%i in ('npm --version 2^>nul') do set "NPM_VERSION=%%i"
+echo Found npm: !NPM_VERSION!
+echo.
+
+echo [2/7] Checking Python...
 set "PYTHON_EXE="
 set "PYTHON_ARGS="
-
-echo [1/8] Checking Python runtime...
 where py >nul 2>nul
 if not errorlevel 1 (
   set "PYTHON_EXE=py"
@@ -39,7 +87,7 @@ if "!PYTHON_EXE!"=="" (
   echo Install Python 3.9+ from https://www.python.org/downloads/windows/
   echo and re-run this script.
   echo.
-  if "!NON_INTERACTIVE!"=="1" exit /b 1
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
   echo Press any key to close...
   pause >nul
   exit /b 1
@@ -50,108 +98,42 @@ if errorlevel 1 (
   echo.
   echo ERROR: Unsupported Python version detected.
   echo Tankoban requires Python 3.9 or newer.
-  echo Upgrade Python and ensure py/python resolves to 3.9+.
   echo.
-  if "!NON_INTERACTIVE!"=="1" exit /b 1
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
   echo Press any key to close...
   pause >nul
   exit /b 1
 )
 
-echo [2/8] Installing Qt player dependencies...
-if "!NON_INTERACTIVE!"=="1" (
-  call "%~dp0app\player_qt\install_windows.bat" --non-interactive
-) else (
-  call "%~dp0app\player_qt\install_windows.bat"
-)
-if errorlevel 1 (
-  echo.
-  echo ERROR: Qt player dependency setup failed.
-  echo.
-  echo Remediation: Verify Python 3.9+, internet access, and rerun build_windows_exe.bat.
-  if "!NON_INTERACTIVE!"=="1" exit /b 1
-  echo Press any key to close...
-  pause >nul
-  exit /b 1
-)
+for /f "tokens=*" %%i in ('"!PYTHON_EXE!" !PYTHON_ARGS! --version 2^>^&1') do set "PYTHON_VERSION=%%i"
+echo Found !PYTHON_VERSION!
 echo.
 
-REM Change to app directory - critical first step
-cd /d "%~dp0app" 2>nul
-if errorlevel 1 (
-  echo.
-  echo ERROR: Unsupported Python version detected. Tankoban requires Python 3.9+.
-  if "%NON_INTERACTIVE%"=="1" exit /b 1
-  pause
-  exit /b 1
-)
-
-echo [2/8] Installing Qt player dependencies...
-call "%REPO_ROOT%app\player_qt\install_windows.bat" --non-interactive
-if errorlevel 1 (
-  echo.
-  echo ERROR: Qt player dependency setup failed.
-  echo Remediation: Verify Python 3.9+, pip health, and internet access.
-  if "%NON_INTERACTIVE%"=="1" exit /b 1
-  pause
-  exit /b 1
-)
-
-REM Check Node.js availability
-echo [3/8] Checking Node.js...
-where node >nul 2>nul
-if errorlevel 1 (
-  echo.
-  echo ERROR: Node.js is not installed or not in PATH.
-  echo Install Node.js LTS from https://nodejs.org/
-  if "%NON_INTERACTIVE%"=="1" exit /b 1
-  pause
-  exit /b 1
-)
-where npm >nul 2>nul
-if errorlevel 1 (
-  echo.
-  echo ERROR: npm is not installed or not in PATH.
-  if "%NON_INTERACTIVE%"=="1" exit /b 1
-  pause
-  exit /b 1
-)
-
-cd /d "%APP_DIR%"
-if errorlevel 1 (
-  echo ERROR: Could not change to app directory.
-  if "%NON_INTERACTIVE%"=="1" exit /b 1
-  pause
-  exit /b 1
-)
-
-REM Ensure mpv runtime files are present (not committed due GitHub 100MB limit)
-echo [4/8] Ensuring MPV runtime binaries...
+echo [3/7] Ensuring MPV runtime binaries...
 call "%~dp0scripts\windows\ensure_mpv_windows.bat"
 if errorlevel 1 (
   echo.
   echo ERROR: MPV runtime setup failed.
+  echo Required files were not found and automatic download failed.
+  echo Check your internet connection and retry.
+  echo.
   if "%NON_INTERACTIVE%"=="1" exit /b 1
-  pause
+  echo Press any key to close...
+  pause >nul
   exit /b 1
 )
 echo.
 
-REM Install dependencies
-echo [5/8] Installing dependencies...
-
-REM BUILD73: Retry logic for EBUSY errors (common on Windows with file locks)
-set INSTALL_SUCCESS=0
-set INSTALL_ATTEMPTS=0
-set MAX_ATTEMPTS=3
+echo [4/7] Installing dependencies...
+set "INSTALL_SUCCESS=0"
+set "INSTALL_ATTEMPTS=0"
+set "MAX_ATTEMPTS=3"
 
 :INSTALL_RETRY
 set /a INSTALL_ATTEMPTS+=1
 echo Attempt %INSTALL_ATTEMPTS% of %MAX_ATTEMPTS%...
 
-REM Kill any stray Electron processes that might be holding file locks
-REM Only target processes from this specific directory to avoid killing user's work
-echo Checking for stray processes...
+echo Checking for stray Electron processes...
 for /f "tokens=2" %%i in ('tasklist /FI "IMAGENAME eq electron.exe" /FO CSV /NH 2^>nul') do (
   set "PID=%%~i"
   if not "!PID!"=="" (
@@ -159,33 +141,37 @@ for /f "tokens=2" %%i in ('tasklist /FI "IMAGENAME eq electron.exe" /FO CSV /NH 
     taskkill /PID !PID! /F >nul 2>&1
   )
 )
-
-REM Small delay to let file handles release
 timeout /t 2 /nobreak >nul 2>&1
 
-echo [5/8] Installing Node dependencies...
 if exist package-lock.json (
-  call npm ci
-  if errorlevel 1 (
-    echo npm ci failed; retrying with npm install...
-    call npm install
-    if errorlevel 1 (
-      echo ERROR: npm dependency install failed.
-      if "%NON_INTERACTIVE%"=="1" exit /b 1
-      pause
-      exit /b 1
+  echo Found package-lock.json. Attempting clean install with npm ci...
+  call npm.cmd ci 2>&1
+  if !errorlevel! equ 0 (
+    set "INSTALL_SUCCESS=1"
+    goto INSTALL_DONE
+  )
+  echo npm ci failed with error code !errorlevel!.
+  if %INSTALL_ATTEMPTS% lss %MAX_ATTEMPTS% (
+    echo This may be a file lock issue. Retrying...
+    timeout /t 3 /nobreak >nul 2>&1
+    goto INSTALL_RETRY
+  ) else (
+    echo npm ci failed after %MAX_ATTEMPTS% attempts. Trying npm install fallback...
+    call npm.cmd install 2>&1
+    if !errorlevel! equ 0 (
+      set "INSTALL_SUCCESS=1"
+      goto INSTALL_DONE
     )
   )
 ) else (
-  echo No package-lock.json found - using npm install...
-  call npm install 2>&1
+  echo No package-lock.json found. Using npm install...
+  call npm.cmd install 2>&1
   if !errorlevel! equ 0 (
-    set INSTALL_SUCCESS=1
+    set "INSTALL_SUCCESS=1"
     goto INSTALL_DONE
   )
-  
   if %INSTALL_ATTEMPTS% lss %MAX_ATTEMPTS% (
-    echo npm install failed. This may be a file lock issue. Retrying...
+    echo npm install failed. Retrying...
     timeout /t 3 /nobreak >nul 2>&1
     goto INSTALL_RETRY
   )
@@ -198,26 +184,21 @@ if !INSTALL_SUCCESS! equ 0 (
   echo DEPENDENCY INSTALLATION FAILED
   echo ========================================
   echo.
-  echo After %MAX_ATTEMPTS% attempts, dependency installation could not complete.
+  echo Dependency installation could not complete after %MAX_ATTEMPTS% attempts.
   echo.
-  echo This is often caused by:
-  echo 1. Windows file locks on node_modules (EBUSY/EPERM errors)
-  echo 2. Antivirus software interfering with npm
-  echo 3. Electron processes holding file handles
+  echo Common causes:
+  echo 1. File locks on node_modules
+  echo 2. Antivirus interference
+  echo 3. Running Electron processes
   echo 4. Insufficient permissions
   echo.
   echo Recommended actions:
-  echo 1. Close ALL editors, terminals, and file explorers
-  echo 2. Disable antivirus temporarily (Windows Defender Real-time Protection)
-  echo 3. Manually delete the "node_modules" folder in the app directory
-  echo 4. Reboot your computer if the above doesn't work
-  echo 5. Run this script again
+  echo 1. Close editors, terminals, and file explorers
+  echo 2. End electron.exe in Task Manager
+  echo 3. Delete app\node_modules and retry
+  echo 4. Reboot and run this script again
   echo.
-  echo If the error mentions "icudtl.dat" or similar Electron files:
-  echo - These files are locked by a running Electron process
-  echo - Check Task Manager for any "electron.exe" processes and end them
-  echo - Or simply reboot your computer
-  echo.
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
   echo Press any key to close...
   pause >nul
   exit /b 1
@@ -226,68 +207,80 @@ if !INSTALL_SUCCESS! equ 0 (
 echo Dependencies installed successfully after %INSTALL_ATTEMPTS% attempt(s).
 echo.
 
-REM Verify electron-builder
-echo [6/8] Verifying electron-builder...
-call npm list electron-builder >nul 2>nul
+echo [5/7] Verifying electron-builder...
+call npm.cmd list electron-builder >nul 2>nul
 if errorlevel 1 (
   echo electron-builder not found in dependencies. Installing it now...
-  call npm install --save-dev electron-builder
+  call npm.cmd install --save-dev electron-builder
   if errorlevel 1 (
-    echo ERROR: npm dependency install failed.
+    echo.
+    echo ERROR: Failed to install electron-builder.
+    echo.
     if "%NON_INTERACTIVE%"=="1" exit /b 1
-    pause
+    echo Press any key to close...
+    pause >nul
     exit /b 1
   )
+  echo electron-builder installed successfully.
+) else (
+  echo electron-builder is available.
 )
 echo.
 
-REM Check for known Windows build issues
-echo [7/8] Checking for common Windows build issues...
-
-echo [6/8] Building TankobanPlayer.exe...
-call npm run build:player
+echo [6/7] Checking common Windows build issues...
+net session >nul 2>&1
 if errorlevel 1 (
-  echo.
-  echo ERROR: Player build failed.
-  if "%NON_INTERACTIVE%"=="1" exit /b 1
-  pause
-  exit /b 1
+  echo Note: Not running as Administrator.
+  echo If build fails with symlink or winCodeSign errors, try Administrator mode.
+) else (
+  echo Running with Administrator privileges.
 )
-
-echo [7/8] Validating player build artifacts...
-call npm run validate:player
+reg query "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /v AllowDevelopmentWithoutDevLicense >nul 2>&1
 if errorlevel 1 (
-  echo.
-  echo ERROR: Player validation failed.
-  if "%NON_INTERACTIVE%"=="1" exit /b 1
-  pause
-  exit /b 1
+  echo Note: Developer Mode is not enabled.
+  echo If build fails with symlink errors, enable Developer Mode in Windows settings.
+) else (
+  echo Developer Mode is enabled.
 )
 echo.
 
-REM Run the build
-echo [8/8] Building Windows packages...
+echo [7/7] Building Windows packages...
 echo [build] Using npm run dist ^(release:prep -> build:player -> validate:player -> electron-builder^)
 echo This may take several minutes. Please wait...
 echo.
 
-echo [8/8] Building Electron distributables...
-call npm run dist
-if errorlevel 1 (
+call npm.cmd run dist
+set "BUILD_RESULT=!errorlevel!"
+
+echo.
+if !BUILD_RESULT! equ 0 (
+  echo ========================================
+  echo BUILD SUCCESSFUL
+  echo ========================================
   echo.
-  echo ERROR: npm run dist failed.
-  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  echo Output files are in app\dist.
+  echo.
+  if "%NON_INTERACTIVE%"=="1" (
+    endlocal
+    exit /b 0
+  )
   pause
-  exit /b 1
+  endlocal
+  exit /b 0
 )
 
-echo.
 echo ========================================
-echo BUILD SUCCESSFUL
+echo BUILD FAILED
 echo ========================================
-echo Dist output: app\dist
-
 echo.
-if "%NON_INTERACTIVE%"=="1" exit /b 0
-pause
-exit /b 0
+echo Exit code: !BUILD_RESULT!
+echo Review the error messages above for details.
+echo.
+if "%NON_INTERACTIVE%"=="1" (
+  endlocal
+  exit /b !BUILD_RESULT!
+)
+echo Press any key to close...
+pause >nul
+endlocal
+exit /b !BUILD_RESULT!

@@ -7,6 +7,15 @@ if /I "%~1"=="--non-interactive" set "NON_INTERACTIVE=1"
 if /I "%~1"=="--ci" set "NON_INTERACTIVE=1"
 if /I "%TANKOBAN_NON_INTERACTIVE%"=="1" set "NON_INTERACTIVE=1"
 
+if not exist "app\package.json" (
+  echo ERROR: app\package.json was not found.
+  echo Run this script from the repository root and keep the "app" folder intact.
+  echo.
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  pause
+  exit /b 1
+)
+
 set "PYTHON_EXE="
 set "PYTHON_ARGS="
 
@@ -81,11 +90,29 @@ if errorlevel 1 (
   exit /b 1
 )
 
+where npm >nul 2>nul
+if errorlevel 1 (
+  echo npm is not installed or not on PATH.
+  echo Install Node.js LTS ^(which includes npm^) and re-run this file.
+  echo.
+  if "%NON_INTERACTIVE%"=="1" exit /b 1
+  pause
+  exit /b 1
+)
+
 echo Installing dependencies...
-call npm.cmd install
+if exist package-lock.json (
+  call npm.cmd ci
+  if errorlevel 1 (
+    echo npm ci failed, falling back to npm install...
+    call npm.cmd install
+  )
+) else (
+  call npm.cmd install
+)
 if errorlevel 1 (
   echo.
-  echo npm install failed. See messages above.
+  echo npm dependency installation failed. See messages above.
   if "%NON_INTERACTIVE%"=="1" exit /b 1
   pause
   exit /b 1
