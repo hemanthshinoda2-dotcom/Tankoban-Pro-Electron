@@ -1,6 +1,11 @@
 @echo off
 setlocal EnableDelayedExpansion
 
+set "NON_INTERACTIVE=0"
+if /I "%~1"=="--non-interactive" set "NON_INTERACTIVE=1"
+if /I "%~1"=="--ci" set "NON_INTERACTIVE=1"
+if /I "%TANKOBAN_NON_INTERACTIVE%"=="1" set "NON_INTERACTIVE=1"
+
 REM BUILD72: Robust Windows build script
 REM - Always keeps console open on any failure
 REM - Shows full error messages with context
@@ -10,6 +15,65 @@ REM - Provides clear guidance on failures
 echo ========================================
 echo Tankoban Pro Build Script - Build 72
 echo ========================================
+echo.
+
+REM BUILD91: Preflight Python + Qt player dependency bootstrap
+set "PYTHON_EXE="
+set "PYTHON_ARGS="
+
+echo [1/8] Checking Python runtime...
+where py >nul 2>nul
+if not errorlevel 1 (
+  set "PYTHON_EXE=py"
+  set "PYTHON_ARGS=-3"
+) else (
+  where python >nul 2>nul
+  if not errorlevel 1 (
+    set "PYTHON_EXE=python"
+  )
+)
+
+if "!PYTHON_EXE!"=="" (
+  echo.
+  echo ERROR: Python was not found on PATH.
+  echo Install Python 3.9+ from https://www.python.org/downloads/windows/
+  echo and re-run this script.
+  echo.
+  if "!NON_INTERACTIVE!"=="1" exit /b 1
+  echo Press any key to close...
+  pause >nul
+  exit /b 1
+)
+
+"!PYTHON_EXE!" !PYTHON_ARGS! -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)"
+if errorlevel 1 (
+  echo.
+  echo ERROR: Unsupported Python version detected.
+  echo Tankoban requires Python 3.9 or newer.
+  echo Upgrade Python and ensure py/python resolves to 3.9+.
+  echo.
+  if "!NON_INTERACTIVE!"=="1" exit /b 1
+  echo Press any key to close...
+  pause >nul
+  exit /b 1
+)
+
+echo [2/8] Installing Qt player dependencies...
+if "!NON_INTERACTIVE!"=="1" (
+  call "%~dp0app\player_qt\install_windows.bat" --non-interactive
+) else (
+  call "%~dp0app\player_qt\install_windows.bat"
+)
+if errorlevel 1 (
+  echo.
+  echo ERROR: Qt player dependency setup failed.
+  echo.
+  echo Remediation: Verify Python 3.9+, internet access, and rerun build_windows_exe.bat.
+  if "!NON_INTERACTIVE!"=="1" exit /b 1
+  echo Press any key to close...
+  pause >nul
+  exit /b 1
+)
 echo.
 
 REM Change to app directory - critical first step
@@ -28,7 +92,7 @@ echo Working directory: %CD%
 echo.
 
 REM Check Node.js availability
-echo [1/5] Checking Node.js...
+echo [3/8] Checking Node.js...
 where node >nul 2>nul
 if errorlevel 1 (
   echo.
@@ -64,7 +128,7 @@ echo Found npm: !NPM_VERSION!
 echo.
 
 REM Ensure mpv runtime files are present (not committed due GitHub 100MB limit)
-echo [2/6] Ensuring MPV runtime binaries...
+echo [4/8] Ensuring MPV runtime binaries...
 call "%~dp0scripts\windows\ensure_mpv_windows.bat"
 if errorlevel 1 (
   echo.
@@ -80,7 +144,7 @@ if errorlevel 1 (
 echo.
 
 REM Install dependencies
-echo [3/6] Installing dependencies...
+echo [5/8] Installing dependencies...
 
 REM BUILD73: Retry logic for EBUSY errors (common on Windows with file locks)
 set INSTALL_SUCCESS=0
@@ -182,7 +246,7 @@ echo Dependencies installed successfully after %INSTALL_ATTEMPTS% attempt(s).
 echo.
 
 REM Verify electron-builder
-echo [4/6] Verifying electron-builder...
+echo [6/8] Verifying electron-builder...
 call npm list electron-builder >nul 2>nul
 if errorlevel 1 (
   echo electron-builder not found in dependencies. Installing it now...
@@ -205,7 +269,7 @@ if errorlevel 1 (
 echo.
 
 REM Check for known Windows build issues
-echo [5/6] Checking for common Windows build issues...
+echo [7/8] Checking for common Windows build issues...
 
 REM Check if running as admin (helps with symlink issues)
 net session >nul 2>&1
@@ -228,7 +292,7 @@ if errorlevel 1 (
 echo.
 
 REM Run the build
-echo [6/6] Building Windows packages...
+echo [8/8] Building Windows packages...
 echo [build] Using npm run dist ^(release:prep -> build:player -> validate:player -> electron-builder^)
 echo This may take several minutes. Please wait...
 echo.
