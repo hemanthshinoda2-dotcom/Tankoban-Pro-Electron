@@ -42,8 +42,12 @@ function getVideoSettingsMem(ctx) {
   try {
     if (!fs.existsSync(prefsPath) && fs.existsSync(legacyPath)) {
       const legacy = normalizeVideoSettings(ctx.storage.readJSON(legacyPath, {}));
-      ctx.storage.writeJSONDebounced(prefsPath, legacy);
-      try { fs.unlinkSync(legacyPath); } catch {}
+      // FIX_BATCH8: Use immediate writeJSON instead of debounced write, and only delete
+      // the legacy file after the write succeeds. Previously unlinkSync ran before the
+      // debounced write fired, risking data loss on crash (C03-P1-4).
+      ctx.storage.writeJSON(prefsPath, legacy).then(() => {
+        try { fs.unlinkSync(legacyPath); } catch {}
+      }).catch(() => {});
       videoSettingsMem = legacy;
       return videoSettingsMem;
     }

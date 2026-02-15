@@ -121,7 +121,10 @@ function writeJSONDebounced(p, obj, delayMs = 150) {
     timer: setTimeout(async () => {
       const cur = debouncedJSONWrites.get(p);
       if (!cur) return;
-      try { await writeJSON(p, cur.latestObj); } catch {}
+      try { await writeJSON(p, cur.latestObj); } catch (err) {
+        // FIX_BATCH4: Log debounced write failures instead of silently swallowing
+        try { console.error('[storage] Debounced write failed:', p, err?.message || err); } catch {}
+      }
       debouncedJSONWrites.delete(p);
     }, delayMs),
   });

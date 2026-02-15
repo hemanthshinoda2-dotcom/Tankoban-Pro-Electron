@@ -142,6 +142,13 @@ appState.settings.scrollMode = 'infinite';
         ? await Tanko.api.archives.cbrOpen(book.path)
         : await Tanko.api.archives.cbzOpen(book.path);
 
+      // FIX_BATCH6: Check opened.ok before using sessionId (C09-P0-1).
+      if (opened && opened.ok === false) {
+        toast(opened.error || 'Failed to open archive');
+        updateLoading('');
+        return;
+      }
+
       const sid = opened.sessionId;
 
 openedSid = sid;

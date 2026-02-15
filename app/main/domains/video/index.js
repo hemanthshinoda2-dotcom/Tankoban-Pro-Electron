@@ -280,6 +280,7 @@ let videoCache = {
   scanId: 0,
   lastScanKey: '',
   scanQueuedFolders: null,
+  scanQueuedShowFolders: null,
   scanQueuedKey: null,
 };
 
@@ -564,6 +565,26 @@ function normalizeDisplayPath(p) {
   return String(p || '').replace(/\\/g, '/');
 }
 
+function normalizePathForMatch(p) {
+  let out = path.normalize(String(p || '')).replace(/[\\/]+$/, '');
+  if (process.platform === 'win32') out = out.toLowerCase();
+  return out;
+}
+
+function pathEqualForMatch(a, b) {
+  const aa = normalizePathForMatch(a);
+  const bb = normalizePathForMatch(b);
+  return !!aa && !!bb && aa === bb;
+}
+
+function isPathWithin(childPath, parentPath) {
+  const child = normalizePathForMatch(childPath);
+  const parent = normalizePathForMatch(parentPath);
+  if (!child || !parent) return false;
+  if (child === parent) return true;
+  return child.startsWith(parent + path.sep) || child.startsWith(parent + '/') || child.startsWith(parent + '\\');
+}
+
 /**
  * Build roots array from config.
  * Lifted from Build 78B index.js lines 382-390.
@@ -829,6 +850,7 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
   });
 
   videoCache.scanWorker = w;
+  let doneReceived = false;
 
   const finish = (ok) => {
     if (myScanId !== videoCache.scanId) return;
@@ -849,7 +871,11 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
       return;
     }
 
-    try { ctx.win?.webContents?.send(ctx.EVENT.VIDEO_SCAN_STATUS, { scanning: false, progress: null }); } catch {}
+    try {
+      const status = { scanning: false, progress: null };
+      if (!ok && videoCache.error) status.error = videoCache.error;
+      ctx.win?.webContents?.send(ctx.EVENT.VIDEO_SCAN_STATUS, status);
+    } catch {}
   };
 
   w.on('message', (msg) => {
@@ -871,7 +897,15 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
     }
 
     if (msg && msg.type === 'done') {
+      doneReceived = true;
       (async () => {
+        if (msg.error) {
+          videoCache.error = String(msg.error || 'Video scan worker failed');
+          __diagLog(`scan DONE ERROR: ${videoCache.error}`);
+          emitVideoUpdated(ctx, { full: true });  // Preserve prior index on worker failure
+          finish(false);
+          return;
+        }
         const idx = msg.idx || { roots: [], shows: [], episodes: [] };
         __diagLog(`scan DONE: roots=${idx.roots?.length}, shows=${idx.shows?.length}, episodes=${idx.episodes?.length}`);
         videoCache.idx = {
@@ -936,9 +970,13 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
       emitVideoUpdated(ctx, { full: true });  // Show all episodes even after error
       finish(false);
     } else {
-      // code 0 but no 'done' message = silent failure
-      __diagLog('scan WORKER EXIT code=0 (no done message received, scan may have failed silently)');
-      finish(true);
+      if (!doneReceived) {
+        // code 0 but no 'done' message = silent failure
+        videoCache.error = 'Video scan worker exited without a done payload';
+        __diagLog('scan WORKER EXIT code=0 (no done payload)');
+        emitVideoUpdated(ctx, { full: true });
+        finish(false);
+      }
     }
   });
 }
@@ -1155,31 +1193,21 @@ async function scan(ctx, _evt, opts) {
  * BUILD FIX: Add rescan show feature.
  */
 async function scanShow(ctx, _evt, showPath) {
-  const sp = String(showPath || '');
+  const sp = normalizePathForMatch(showPath);
   if (!sp) return { ok: false };
 
   const cfg = readLibraryConfig(ctx);
+  const rootFolders = Array.isArray(cfg.videoFolders) ? cfg.videoFolders : [];
+  const showFolders = Array.isArray(cfg.videoShowFolders) ? cfg.videoShowFolders : [];
 
-  // Determine if this show is in videoFolders (root child) or videoShowFolders (explicit)
-  const isInShowFolders = (cfg.videoShowFolders || []).includes(sp);
+  const isConfiguredShowFolder = showFolders.some((sf) => pathEqualForMatch(sf, sp));
+  const isUnderConfiguredRoot = rootFolders.some((rf) => isPathWithin(sp, rf));
+  if (!isConfiguredShowFolder && !isUnderConfiguredRoot) return { ok: false, reason: 'not_found' };
 
-  if (isInShowFolders) {
-    // Rescan as a single show folder
-    startVideoScan(ctx, [], [sp], { force: true });
-  } else {
-    // Try to find parent root folder
-    const rootFolders = cfg.videoFolders || [];
-    const parentRoot = rootFolders.find(rf => sp.startsWith(rf + path.sep));
-
-    if (parentRoot) {
-      // Rescan the entire root folder (could optimize to just this show, but requires worker changes)
-      startVideoScan(ctx, [parentRoot], [], { force: true });
-    } else {
-      return { ok: false, reason: 'not_found' };
-    }
-  }
-
-  return { ok: true };
+  // Current worker output is a full index snapshot. Keep library integrity by rescanning
+  // all configured roots/show-folders from this show-level entry point.
+  startVideoScan(ctx, rootFolders, showFolders, { force: true });
+  return { ok: true, scoped: false };
 }
 
 /**
@@ -1246,6 +1274,7 @@ async function cancelScan(ctx) {
   videoCache.scanning = false;
   videoCache.error = null;
   videoCache.scanQueuedFolders = null;
+  videoCache.scanQueuedShowFolders = null;
   videoCache.scanQueuedKey = null;
 
   try { await w.terminate(); } catch {}
@@ -1320,16 +1349,16 @@ async function addShowFolder(ctx, evt) {
     __diagLog(`addShowFolder: existing videoShowFolders=${JSON.stringify(state.videoShowFolders)}`);
 
     // Skip if this folder is already a child of an existing show folder (already covered by recursive scan)
-    const isChildOfExisting = state.videoShowFolders.some(sf => folder.startsWith(sf + path.sep));
+    const isChildOfExisting = state.videoShowFolders.some(sf => isPathWithin(folder, sf) && !pathEqualForMatch(folder, sf));
     if (isChildOfExisting) {
       __diagLog(`addShowFolder: skipped — already covered by parent show folder`);
       return { ok: false, reason: 'covered' };
     }
 
     // If this folder is a parent of existing show folders, remove the children (parent covers them)
-    state.videoShowFolders = state.videoShowFolders.filter(sf => !sf.startsWith(folder + path.sep));
+    state.videoShowFolders = state.videoShowFolders.filter(sf => !isPathWithin(sf, folder) || pathEqualForMatch(sf, folder));
 
-    if (!state.videoShowFolders.includes(folder)) state.videoShowFolders.unshift(folder);
+    if (!state.videoShowFolders.some(sf => pathEqualForMatch(sf, folder))) state.videoShowFolders.unshift(folder);
     await writeLibraryConfig(ctx, state);
 
     await ensureVideoIndexLoaded(ctx);

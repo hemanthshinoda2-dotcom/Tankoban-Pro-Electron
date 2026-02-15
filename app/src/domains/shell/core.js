@@ -2504,6 +2504,16 @@ function setReaderMode(next) {
   // Confirmation dialog for series removal (explicit: no disk deletion)
   async function confirmRemoveSeriesFromLibrary() {
     return await new Promise((resolve) => {
+      // FIX_BATCH5: Added done guard and cancel event, matching confirmRemoveRootFolder pattern.
+      let done = false;
+      const finish = (v) => {
+        if (done) return;
+        done = true;
+        try { d.close(); } catch {}
+        try { d.remove(); } catch {}
+        resolve(!!v);
+      };
+
       const d = document.createElement('dialog');
       d.style.padding = '18px';
       d.style.borderRadius = '14px';
@@ -2523,12 +2533,7 @@ function setReaderMode(next) {
         </div>
       `;
 
-      const finish = (v) => {
-        try { d.close(); } catch {}
-        try { d.remove(); } catch {}
-        resolve(v);
-      };
-
+      d.addEventListener('cancel', (e) => { e.preventDefault(); finish(false); });
       d.querySelector('[data-act="cancel"]')?.addEventListener('click', () => finish(false));
       d.querySelector('[data-act="remove"]')?.addEventListener('click', () => finish(true));
 
@@ -2565,9 +2570,14 @@ function setReaderMode(next) {
           },
         },
         {
-          label: 'Rescan series',
+          // FIX_BATCH5: Renamed from "Rescan series" — action always triggers full library scan.
+          label: 'Rescan library',
           onClick: async () => {
-            try { await Tanko.api.library.scan({ force: true }); } catch {}
+            try { await Tanko.api.library.scan({ force: true }); } catch (err) {
+              console.error('[series-ctx] Rescan failed:', err);
+              toast('Rescan failed', 2000);
+              return;
+            }
             await refreshLibrary();
             toast('Refreshing…');
           },
@@ -2624,7 +2634,9 @@ if (!window.__tankoInitialBootStarted) {
     if (openedExternal) return;
 
     // Reader window startup support remains, but reader scripts are loaded lazily.
-    const openId = (new URLSearchParams(window.location.search)).get('openBookId');
+    // Read both current (?book=) and legacy (?openBookId=) query keys.
+    const params = new URLSearchParams(window.location.search);
+    const openId = params.get('book') || params.get('openBookId');
     if (!openId) return;
 
     const b =
@@ -2651,6 +2663,15 @@ if (!window.__tankoInitialBootStarted) {
         console.log(`[boot-timing] initial boot complete in ${bt.initialBootDoneMs}ms`);
       }
     } catch {}
+    // FIX_BATCH8: Eagerly trigger reader module loading in the background so that
+    // library-mode controls (add root/series, continue, volume sort/search, global search)
+    // become responsive shortly after boot instead of waiting for the first openBook() call.
+    // Addresses C06/C07/C08-P0 deferred binding issue.
+    try {
+      if (typeof window.Tanko?.deferred?.ensureReaderModulesLoaded === 'function') {
+        window.Tanko.deferred.ensureReaderModulesLoaded().catch(() => {});
+      }
+    } catch {}
   });
 }
 
@@ -2661,6 +2682,12 @@ try {
   window.Tanko.state = window.Tanko.state || {};
   // Keep legacy global bindings, but also provide a single discoverable state surface.
   window.Tanko.state.app = window.Tanko.state.app || appState;
-  window.Tanko.state.library = window.Tanko.state.library || appState.library;
-  window.Tanko.state.settings = window.Tanko.state.settings || appState.settings;
+  // FIX_BATCH8: Use getters so that .library and .settings always reflect the current
+  // appState values even after refreshLibrary() or resetToDefaults() replace them (C04-P1-2).
+  if (!Object.getOwnPropertyDescriptor(window.Tanko.state, 'library')?.get) {
+    Object.defineProperty(window.Tanko.state, 'library', { get: () => appState.library, configurable: true });
+  }
+  if (!Object.getOwnPropertyDescriptor(window.Tanko.state, 'settings')?.get) {
+    Object.defineProperty(window.Tanko.state, 'settings', { get: () => appState.settings, configurable: true });
+  }
 } catch {}

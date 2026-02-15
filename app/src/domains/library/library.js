@@ -379,11 +379,16 @@ Hot search tokens:
           y: e.clientY,
           items: [
             {
-              label: 'Rescan this root',
+              // FIX_BATCH6: Relabeled from "Rescan this root" — action triggers full library scan (C06-P1).
+              label: 'Rescan library',
               onClick: async () => {
-                try { await Tanko.api.library.scan({ force: true }); } catch {}
-                await refreshLibrary();
-                toast('Refreshing…');
+                try {
+                  await Tanko.api.library.scan({ force: true });
+                  await refreshLibrary();
+                  toast('Refreshing…');
+                } catch (err) {
+                  toast('Rescan failed');
+                }
               },
             },
             {
@@ -510,8 +515,16 @@ Hot search tokens:
       if (coverBook) attachThumb(img, coverBook);
 
 
+      // FIX_BATCH7: Route grid quick-remove through confirmation dialog parity with context-menu (C07-P1-2).
       card.querySelector('.seriesRemove').addEventListener('click', async (e) => {
         e.stopPropagation();
+        const confirmFn = (typeof confirmRemoveSeriesFromLibrary === 'function')
+          ? confirmRemoveSeriesFromLibrary
+          : null;
+        const ok = confirmFn
+          ? await confirmFn()
+          : window.confirm('Remove from library?\n\nThis removes it from the library. It does not delete files from disk.');
+        if (!ok) return;
         const res = await Tanko.api.library.removeSeriesFolder(s.path);
         if (res?.state) {
           appState.library = res.state;
@@ -781,6 +794,8 @@ Hot search tokens:
       e.preventDefault();
       e.stopPropagation();
       const idx = parseInt(row.dataset.rowidx || '-1', 10);
+      // FIX_BATCH7: Sync selection to the right-clicked row before showing menu (C08-P1-3).
+      if (idx >= 0) setVolumeSelectionByIndex(idx);
       const b = volumeRenderState.sorted[idx];
       if (!b) return;
 
@@ -1074,7 +1089,7 @@ Hot search tokens:
         for (const t of qTokens) if (e.tokens.has(t)) score += 12;
         return score;
       },
-    }).sort((a, b) => naturalCompare(a.name, b.name));
+    }); // FIX_BATCH7: Removed alphabetical post-sort to preserve relevance ranking (C07-P1-3).
 
     const books = searchIndexedEntries({
       query: q,
@@ -1091,7 +1106,7 @@ Hot search tokens:
         for (const t of qTokens) if (e.tokens.has(t)) score += 10;
         return score;
       },
-    }).sort((a, b) => naturalCompare(a.title, b.title));
+    }); // FIX_BATCH7: Removed alphabetical post-sort to preserve relevance ranking (C07-P1-3).
 
     return { series, books };
   }
@@ -1193,7 +1208,8 @@ Hot search tokens:
           `;
         }
         item.addEventListener('mouseenter', () => setGlobalSearchSelection(parseInt(item.dataset.idx || '0', 10)));
-        item.addEventListener('click', () => activateGlobalSearchSelection());
+        // FIX_BATCH7: Set selection from clicked item before activation, not relying on hover (C07-P1-5).
+        item.addEventListener('click', () => { setGlobalSearchSelection(parseInt(item.dataset.idx || '0', 10)); activateGlobalSearchSelection(); });
         g.appendChild(item);
         idx += 1;
       }

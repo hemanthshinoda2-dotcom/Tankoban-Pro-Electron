@@ -1915,15 +1915,15 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
 .scrubChapterMark{
   position:absolute;
   top:0; bottom:0;
-  width:2px; /* BUILD 89: Wider for visibility */
-  background: #FFFFFF; /* BUILD 89: Bright red for visibility */
-  z-index: 9999; /* BUILD 89: High z-index to ensure visibility */
-  pointer-events: auto; /* BUILD 89: Ensure clickable */
+  width:2px;
+  background:#FFFFFF;
+  z-index:9999;
+  pointer-events:auto;
 }
 .videoScrub--minimal .scrubChapterMark{
-  background: #FFFFFF; /* BUILD 89: Bright red override */
-  width: 2px; /* BUILD 89: Wider for visibility */
-  z-index: 9999; /* BUILD 89: High z-index */
+  background:#FFFFFF;
+  width:2px;
+  z-index:9999;
 }
 
 .scrubThumb{

@@ -819,6 +819,8 @@ function getThumbWarmupMode(){
       callGlobalSearchSetSelection((appState.ui.globalSearchSel || 0) - 1);
     } else if (key === 'Enter') {
       e.preventDefault(); e.stopPropagation();
+      // FIX_BATCH7: Flush pending debounce to render current-query results before activation (C07-P1-4).
+      if (globalSearchInputTimer) { clearTimeout(globalSearchInputTimer); globalSearchInputTimer = 0; callGlobalSearchRender(); }
       callGlobalSearchActivateSelection();
     } else if (key === 'Escape') {
       e.preventDefault(); e.stopPropagation();

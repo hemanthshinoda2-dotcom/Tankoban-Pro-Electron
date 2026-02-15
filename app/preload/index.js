@@ -741,6 +741,8 @@ const legacy = {
   openSubtitleDialog: (...args) => api.window.openSubtitleDialog(...args),
   minimize: (...args) => api.window.minimize(...args),
   close: (...args) => api.window.close(...args),
+  hideWindow: (...args) => api.window.hide(...args),
+  showWindow: (...args) => api.window.show(...args),
   openBookInNewWindow: (...args) => api.window.openBookInNewWindow(...args),
   openVideoShell: (...args) => api.window.openVideoShell(...args),
 
@@ -770,14 +772,18 @@ const legacy = {
   onVideoShellPlay: (...args) => api.video.onShellPlay(...args),
   onVideoScanStatus: (...args) => api.video.onScanStatus(...args),
   scanVideoLibrary: (...args) => api.video.scan(...args),
+  scanVideoShow: (...args) => api.video.scanShow(...args),
+  scanShow: (...args) => api.video.scanShow(...args),
   cancelVideoScan: (...args) => api.video.cancelScan(...args),
   addVideoFolder: (...args) => api.video.addFolder(...args),
+  addVideoShowFolder: (...args) => api.video.addShowFolder(...args),
   removeVideoFolder: (...args) => api.video.removeFolder(...args),
   hideVideoShow: (...args) => api.video.hideShow(...args),
   openVideoFileDialog: (...args) => api.video.openFileDialog(...args),
   openSubtitleFileDialog: (...args) => api.video.openSubtitleFileDialog(...args),
   getEpisodesForShow: (...args) => api.video.getEpisodesForShow(...args),
   getEpisodesForRoot: (...args) => api.video.getEpisodesForRoot(...args),
+  getEpisodesByIds: (...args) => api.video.getEpisodesByIds(...args),
   generateVideoShowThumbnail: (...args) => api.video.generateShowThumbnail(...args),
 
   // thumbs
@@ -842,6 +848,11 @@ const legacy = {
   getSeriesSettings: (...args) => api.seriesSettings.get(...args),
   saveSeriesSettings: (...args) => api.seriesSettings.save(...args),
   clearSeriesSettings: (...args) => api.seriesSettings.clear(...args),
+
+  // build14
+  saveReturnState: (...args) => api.build14.saveReturnState(...args),
+  getReturnState: (...args) => api.build14.getReturnState(...args),
+  clearReturnState: (...args) => api.build14.clearReturnState(...args),
   
   // BUILD 88 FIX 3.2: Health check ping
   // TRACE:IPC_OUT ipcRenderer.invoke @ index.js

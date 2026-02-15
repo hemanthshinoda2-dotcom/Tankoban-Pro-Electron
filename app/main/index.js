@@ -354,14 +354,10 @@ function createWindow(opts = {}) {
     try { Menu.setApplicationMenu(null); } catch {}
   }
 
-  // Register DevTools shortcuts only when allowed.
-  if (__allowDevTools) {
-    try {
-      globalShortcut.unregisterAll();
-      globalShortcut.register('CommandOrControl+Shift+I', () => { try { w.webContents.toggleDevTools(); } catch {} });
-      globalShortcut.register('F12', () => { try { w.webContents.toggleDevTools(); } catch {} });
-    } catch {}
-  }
+  // FIX_BATCH4: Removed redundant globalShortcut DevTools registration.
+  // Per-window DevTools shortcuts are already bound via webContents.on('before-input-event')
+  // in __tankobanBindDevtoolsShortcuts (IPC registry). The globalShortcut registration was
+  // process-wide and clobbered other windows' shortcuts on multi-window.
 
   w.on('focus', () => { win = w; });
   w.on('closed', () => {
@@ -620,11 +616,24 @@ app.whenReady().then(async () => {
 
 app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch {} });
 
+// FIX_BATCH4: Flush all pending debounced writes before quit to prevent data loss.
+// Without this, the last ~150ms of progress/settings saves can be lost on every normal quit.
+let __quitFlushStarted = false;
+app.on('before-quit', (e) => {
+  if (__quitFlushStarted) return; // allow quit to proceed after flush
+  __quitFlushStarted = true;
+  e.preventDefault();
+  const _storage = require('./lib/storage');
+  _storage.flushAllWrites()
+    .catch((err) => { try { console.error('[quit] Flush pending writes error:', err); } catch {} })
+    // Use app.quit() so the normal Electron shutdown lifecycle (before-quit/will-quit)
+    // still runs after flush completes.
+    .finally(() => { app.quit(); });
+});
+
 app.on('window-all-closed', () => {
   if (__isPlayerLauncherMode) return; // Qt player is still running headless
   if (process.platform !== 'darwin') app.quit();
 });
-
-// Note: before-quit cleanup handled in IPC registry where state lives
 
 }; // end boot

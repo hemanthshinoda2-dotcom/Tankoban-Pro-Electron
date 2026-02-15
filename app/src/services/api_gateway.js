@@ -49,6 +49,8 @@
       isFullscreen: (...a) => ea.window?.isFullscreen ? ea.window.isFullscreen(...a) : ea.isFullscreen(...a),
       toggleFullscreen: (...a) => ea.window?.toggleFullscreen ? ea.window.toggleFullscreen(...a) : ea.toggleFullscreen(...a),
       setFullscreen: (...a) => ea.window?.setFullscreen ? ea.window.setFullscreen(...a) : ea.setFullscreen(...a),
+      hide: (...a) => ea.window?.hide ? ea.window.hide(...a) : ea.hideWindow?.(...a),
+      show: (...a) => ea.window?.show ? ea.window.show(...a) : ea.showWindow?.(...a),
       isAlwaysOnTop: (...a) => ea.window?.isAlwaysOnTop ? ea.window.isAlwaysOnTop(...a) : ea.isAlwaysOnTop(...a),
       toggleAlwaysOnTop: (...a) => ea.window?.toggleAlwaysOnTop ? ea.window.toggleAlwaysOnTop(...a) : ea.toggleAlwaysOnTop(...a),
       takeScreenshot: (...a) => ea.window?.takeScreenshot ? ea.window.takeScreenshot(...a) : ea.takeScreenshot(...a),
@@ -95,31 +97,35 @@
       onUpdated: (cb) => ea.video?.onUpdated ? ea.video.onUpdated(cb) : ea.onVideoUpdated(cb),
       onShellPlay: (cb) => ea.video?.onShellPlay ? ea.video.onShellPlay(cb) : ea.onVideoShellPlay(cb),
       onScanStatus: (cb) => ea.video?.onScanStatus ? ea.video.onScanStatus(cb) : ea.onVideoScanStatus(cb),
-      scan: (...a) => ea.video?.scan ? ea.video.scan(...a) : ea.scanVideos(...a),
+      scan: (...a) => ea.video?.scan ? ea.video.scan(...a) : ea.scanVideoLibrary(...a),
+      scanShow: (...a) => ea.video?.scanShow ? ea.video.scanShow(...a)
+        : (ea.scanVideoShow ? ea.scanVideoShow(...a)
+          : (ea.scanShow ? ea.scanShow(...a) : Promise.resolve({ ok: false, reason: 'scan_show_unavailable' }))),
       cancelScan: (...a) => ea.video?.cancelScan ? ea.video.cancelScan(...a) : ea.cancelVideoScan(...a),
       addFolder: (...a) => ea.video?.addFolder ? ea.video.addFolder(...a) : ea.addVideoFolder(...a),
       addShowFolder: (...a) => ea.video?.addShowFolder ? ea.video.addShowFolder(...a)
-        : (ea.addVideoShowFolder ? ea.addVideoShowFolder(...a) : undefined),
+        : (ea.addVideoShowFolder ? ea.addVideoShowFolder(...a) : Promise.resolve({ ok: false, reason: 'addShowFolder unavailable' })),
       removeFolder: (...a) => ea.video?.removeFolder ? ea.video.removeFolder(...a) : ea.removeVideoFolder(...a),
       hideShow: (...a) => ea.video?.hideShow ? ea.video.hideShow(...a) : ea.hideVideoShow(...a),
       openFileDialog: (...a) => ea.video?.openFileDialog ? ea.video.openFileDialog(...a) : ea.openVideoFileDialog(...a),
-      openSubtitleFileDialog: (...a) => ea.video?.openSubtitleFileDialog ? ea.video.openSubtitleFileDialog(...a) : ea.openVideoSubtitleFileDialog(...a),
+      openSubtitleFileDialog: (...a) => ea.video?.openSubtitleFileDialog ? ea.video.openSubtitleFileDialog(...a) : ea.openSubtitleFileDialog(...a),
       generateShowThumbnail: (...a) => ea.video?.generateShowThumbnail ? ea.video.generateShowThumbnail(...a)
-        : (ea.generateVideoShowThumbnail ? ea.generateVideoShowThumbnail(...a) : undefined),
+        : (ea.generateVideoShowThumbnail ? ea.generateVideoShowThumbnail(...a) : Promise.resolve({ ok: false, reason: 'generateShowThumbnail unavailable' })),
 
       // BUILD 93+: Added-files + restore-hidden helpers (renderer gateway wrappers)
       addFiles: (...a) => ea.video?.addFiles ? ea.video.addFiles(...a)
-        : (ea.addVideoFiles ? ea.addVideoFiles(...a) : (ea.addFiles ? ea.addFiles(...a) : undefined)),
+        : (ea.addVideoFiles ? ea.addVideoFiles(...a) : (ea.addFiles ? ea.addFiles(...a) : Promise.resolve({ ok: false, reason: 'addFiles unavailable' }))),
       removeFile: (...a) => ea.video?.removeFile ? ea.video.removeFile(...a)
-        : (ea.removeVideoFile ? ea.removeVideoFile(...a) : (ea.removeFile ? ea.removeFile(...a) : undefined)),
+        : (ea.removeVideoFile ? ea.removeVideoFile(...a) : (ea.removeFile ? ea.removeFile(...a) : Promise.resolve({ ok: false, reason: 'removeFile unavailable' }))),
       restoreAllHiddenShows: (...a) => ea.video?.restoreAllHiddenShows ? ea.video.restoreAllHiddenShows(...a)
-        : (ea.restoreAllHiddenVideoShows ? ea.restoreAllHiddenVideoShows(...a) : undefined),
+        : (ea.restoreAllHiddenVideoShows ? ea.restoreAllHiddenVideoShows(...a) : Promise.resolve({ ok: false, reason: 'restoreAllHiddenShows unavailable' })),
       restoreHiddenShowsForRoot: (...a) => ea.video?.restoreHiddenShowsForRoot ? ea.video.restoreHiddenShowsForRoot(...a)
-        : (ea.restoreHiddenVideoShowsForRoot ? ea.restoreHiddenVideoShowsForRoot(...a) : undefined),
+        : (ea.restoreHiddenVideoShowsForRoot ? ea.restoreHiddenVideoShowsForRoot(...a) : Promise.resolve({ ok: false, reason: 'restoreHiddenShowsForRoot unavailable' })),
 
       getEpisodesForShow: (...a) => ea.video?.getEpisodesForShow ? ea.video.getEpisodesForShow(...a) : ea.getEpisodesForShow(...a),
       getEpisodesForRoot: (...a) => ea.video?.getEpisodesForRoot ? ea.video.getEpisodesForRoot(...a) : ea.getEpisodesForRoot(...a),
-      getEpisodesByIds: (...a) => ea.video?.getEpisodesByIds ? ea.video.getEpisodesByIds(...a) : ea.getEpisodesByIds?.(...a),
+      getEpisodesByIds: (...a) => ea.video?.getEpisodesByIds ? ea.video.getEpisodesByIds(...a)
+        : (ea.getEpisodesByIds ? ea.getEpisodesByIds(...a) : Promise.resolve([])),
     },
 
     // ========================================
@@ -166,7 +172,7 @@
     // clipboard.*
     // ========================================
     clipboard: {
-      copyText: (...a) => ea.clipboard?.copyText ? ea.clipboard.copyText(...a) : ea.setClipboardText(...a),
+      copyText: (...a) => ea.clipboard?.copyText ? ea.clipboard.copyText(...a) : ea.copyText(...a),
     },
 
     // ========================================
@@ -228,6 +234,18 @@
       get: (...a) => ea.seriesSettings?.get ? ea.seriesSettings.get(...a) : ea.getSeriesSettings(...a),
       save: (...a) => ea.seriesSettings?.save ? ea.seriesSettings.save(...a) : ea.saveSeriesSettings(...a),
       clear: (...a) => ea.seriesSettings?.clear ? ea.seriesSettings.clear(...a) : ea.clearSeriesSettings(...a),
+    },
+
+    // ========================================
+    // build14.*
+    // ========================================
+    build14: {
+      saveReturnState: (...a) => ea.build14?.saveReturnState ? ea.build14.saveReturnState(...a)
+        : (ea.saveReturnState ? ea.saveReturnState(...a) : Promise.resolve({ ok: false, reason: 'build14_unavailable' })),
+      getReturnState: (...a) => ea.build14?.getReturnState ? ea.build14.getReturnState(...a)
+        : (ea.getReturnState ? ea.getReturnState(...a) : Promise.resolve({ ok: false, state: null, reason: 'build14_unavailable' })),
+      clearReturnState: (...a) => ea.build14?.clearReturnState ? ea.build14.clearReturnState(...a)
+        : (ea.clearReturnState ? ea.clearReturnState(...a) : Promise.resolve({ ok: false, reason: 'build14_unavailable' })),
     },
 
     // ========================================

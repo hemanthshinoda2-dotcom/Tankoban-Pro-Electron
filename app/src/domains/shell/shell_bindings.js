@@ -99,13 +99,16 @@
     setDrawerOpen(false);
   });
 
-  el.refreshBtn.addEventListener('click', () => {
-    if (document.body.classList.contains('inVideoMode')) {
-      try { window.videoApp && window.videoApp.refresh && window.videoApp.refresh(); } catch {}
-      return;
-    }
-    refreshLibrary();
-  });
+  // FIX_BATCH5: Added null guard (matching libBackBtn, libFsBtn, playerFsBtn pattern).
+  if (el.refreshBtn) {
+    el.refreshBtn.addEventListener('click', () => {
+      if (document.body.classList.contains('inVideoMode')) {
+        try { window.videoApp && window.videoApp.refresh && window.videoApp.refresh(); } catch {}
+        return;
+      }
+      refreshLibrary();
+    });
+  }
 
   // BUILD27: cancel running scan
   el.libraryScanCancel?.addEventListener('click', async (e) => {
@@ -138,12 +141,15 @@
   }
   el.closeBtn.addEventListener('click', () => Tanko.api.window.close());
 
-  el.seriesBackBtn.addEventListener('click', () => {
-    appState.selectedSeriesId = null;
-    renderLibrary();
-  });
+  // FIX_BATCH5: Added null guards to prevent IIFE crash cascade if elements are missing.
+  if (el.seriesBackBtn) {
+    el.seriesBackBtn.addEventListener('click', () => {
+      appState.selectedSeriesId = null;
+      renderLibrary();
+    });
+  }
 
-    el.playerMinBtn.addEventListener('click', () => Tanko.api.window.minimize());
+  if (el.playerMinBtn) el.playerMinBtn.addEventListener('click', () => Tanko.api.window.minimize());
   if (el.playerFsBtn) {
     el.playerFsBtn.addEventListener('click', async () => {
       try { await Tanko.api.window.toggleFullscreen(); } catch {}
@@ -151,7 +157,7 @@
       try { if (typeof syncPlayerFullscreenBtn === 'function') syncPlayerFullscreenBtn().catch(()=>{}); } catch {}
     });
   }
-  el.playerCloseBtn.addEventListener('click', () => Tanko.api.window.close());
+  if (el.playerCloseBtn) el.playerCloseBtn.addEventListener('click', () => Tanko.api.window.close());
 
   // Sync fullscreen button titles at least once on startup.
   try { if (typeof syncPlayerFullscreenBtn === 'function') syncPlayerFullscreenBtn().catch(()=>{}); } catch {}

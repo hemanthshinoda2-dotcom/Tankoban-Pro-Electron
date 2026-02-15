@@ -3151,7 +3151,7 @@ class PlayerWindow(QMainWindow):
 
             # Keep ASS override mode stable across HUD show/hide so subtitle outlines
             # do not visually pop when controls auto-hide.
-            ass_mode = 'no' if bool(getattr(self, '_respect_subtitle_styles', False)) else 'force'
+            ass_mode = 'no' if bool(getattr(self, '_respect_subtitle_styles', False)) else 'yes'
             try:
                 self._mpv.command('set', 'sub-ass-override', ass_mode)
             except Exception:
@@ -3861,12 +3861,12 @@ class PlayerWindow(QMainWindow):
             except Exception:
                 pass
             
-            # Build 13+: subtitle style mode (readable forced outline by default)
+            # Build 13+: subtitle style mode (readable overridden outline by default)
             try:
-                self._mpv.sub_ass_override = 'no' if bool(getattr(self, '_respect_subtitle_styles', False)) else 'force'
+                self._mpv.sub_ass_override = 'no' if bool(getattr(self, '_respect_subtitle_styles', False)) else 'yes'
             except Exception:
                 try:
-                    self._mpv.command('set', 'sub-ass-override', 'no' if bool(getattr(self, '_respect_subtitle_styles', False)) else 'force')
+                    self._mpv.command('set', 'sub-ass-override', 'no' if bool(getattr(self, '_respect_subtitle_styles', False)) else 'yes')
                 except Exception:
                     pass
 
@@ -5130,10 +5130,10 @@ class PlayerWindow(QMainWindow):
             pass
 
     def _set_subtitle_style_respect(self, enabled: bool):
-        """Toggle between embedded ASS styles and forced readable subtitle outline."""
+        """Toggle between embedded ASS styles and readable overridden subtitle outline."""
         try:
             self._respect_subtitle_styles = bool(enabled)
-            # mpv option: sub-ass-override (no/force)
+            # mpv option: sub-ass-override (no/yes)
             if enabled:
                 try:
                     self._mpv.sub_ass_override = 'no'
@@ -5142,9 +5142,9 @@ class PlayerWindow(QMainWindow):
                 self.toast.show_toast("Subtitle styles: embedded")
             else:
                 try:
-                    self._mpv.sub_ass_override = 'force'
+                    self._mpv.sub_ass_override = 'yes'
                 except Exception:
-                    self._mpv.command('set', 'sub-ass-override', 'force')
+                    self._mpv.command('set', 'sub-ass-override', 'yes')
                 self.toast.show_toast("Subtitle styles: readable")
             try:
                 self._apply_subtitle_safe_margin()

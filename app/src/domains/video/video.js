@@ -682,17 +682,7 @@ function renderScrubChapters(durationSec){
   const dur = Number(durationSec) || 0;
   const chapters = Array.isArray(state.videoChapters) ? state.videoChapters : [];
   
-  // BUILD 89 FIX 2: Add debug logging
-  console.log('[BUILD89 CHAPTERS] renderScrubChapters called:', {
-    duration: dur,
-    chapterCount: chapters.length,
-    chapters: chapters
-  });
-  
-  if (!dur || dur <= 0 || !chapters.length) {
-    console.log('[BUILD89 CHAPTERS] No chapters to render:', { dur, chapterCount: chapters.length });
-    return;
-  }
+  if (!dur || dur <= 0 || !chapters.length) return;
 
   for (const ch of chapters) {
     const t = Number(ch && (ch.timeSec ?? ch.time ?? ch.start ?? ch.startTime));
@@ -702,26 +692,13 @@ function renderScrubChapters(durationSec){
     mark.className = 'scrubChapterMark';
     mark.style.left = `${pct.toFixed(4)}%`;
     mark.style.cursor = 'pointer'; // BUILD 87: Indicate clickable
-    
-    // BUILD 89 FIX 2: Force bright red and high z-index for visibility
-    mark.style.background = '#FFFFFF';
-    mark.style.width = '2px';
-    mark.style.zIndex = '9999';
-    mark.style.position = 'absolute';
-    mark.style.top = '0';
-    mark.style.bottom = '0';
-    
+
+    // FIX_BATCH6: Removed redundant inline styles — CSS class .scrubChapterMark handles these (C16-P2).
+
     // BUILD 87: Add tooltip with chapter title + timestamp
     const title = String(ch.title || '').trim() || 'Chapter';
     const timeStr = fmtTime(t);
     mark.title = `${title} (${timeStr})`;
-    
-    console.log('[BUILD89 CHAPTERS] Creating marker:', {
-      time: t,
-      percent: pct,
-      title: title,
-      left: mark.style.left
-    });
     
     // BUILD 87: Click to seek to chapter
     mark.addEventListener('click', (e) => {
@@ -738,26 +715,19 @@ function renderScrubChapters(durationSec){
     
     wrap.appendChild(mark);
   }
-  
-  console.log('[BUILD89 CHAPTERS] Rendered', wrap.children.length, 'chapter markers');
 }
 
 async function refreshChaptersFromPlayer(){
-  console.log('[BUILD89 CHAPTERS] refreshChaptersFromPlayer called');
   state.videoChapters = [];
   try {
     if (!state.player || typeof state.player.getChapters !== 'function') {
-      console.log('[BUILD89 CHAPTERS] No player or getChapters not supported');
       renderScrubChapters(state.player?.getState?.()?.durationSec || 0);
       return;
     }
-    console.log('[BUILD89 CHAPTERS] Fetching chapters from player...');
     const r = await state.player.getChapters();
-    console.log('[BUILD89 CHAPTERS] getChapters result:', r);
-    
+
     const list = (r && r.ok && Array.isArray(r.chapters)) ? r.chapters : [];
-    console.log('[BUILD89 CHAPTERS] CHAPTER DATA RECEIVED:', list);
-    
+
     // Normalize shape: { timeSec, title }
     const out = [];
     for (const c of list) {
@@ -767,18 +737,13 @@ async function refreshChaptersFromPlayer(){
     }
     out.sort((a, b) => a.timeSec - b.timeSec);
     state.videoChapters = out;
-    console.log('[BUILD89 CHAPTERS] Normalized chapters:', out);
-  } catch (err) {
-    console.error('[BUILD89 CHAPTERS] Error fetching chapters:', err);
+  } catch {
     state.videoChapters = [];
   }
   try {
     const st = state.player?.getState?.() || {};
-    console.log('[BUILD89 CHAPTERS] Calling renderScrubChapters with duration:', st.durationSec);
     renderScrubChapters(st.durationSec || 0);
-  } catch (err) {
-    console.error('[BUILD89 CHAPTERS] Error rendering chapters:', err);
-  }
+  } catch {}
 }
 
   // BUILD100v7: Video metadata can come from multiple sources.
@@ -1366,7 +1331,7 @@ saveNow(true); } catch {}
       const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
       if (useQt && api && api.player && typeof api.player.launchQt === 'function') {
         const sessionId = String(Date.now());
-        const start = (opts && Number.isFinite(Number(opts.resumeOverridePosSec))) ? Number(opts.resumeOverridePosSec) : 0;
+        const start = (payload && Number.isFinite(Number(payload.resumePosSec))) ? Number(payload.resumePosSec) : 0;
         try { toast('Opening in Qt player…', 1200); } catch {}
         await api.player.launchQt({ filePath: String(v.path), startSeconds: start, sessionId });
         return;
@@ -1691,9 +1656,11 @@ saveNow(true); } catch {}
       updateAlwaysOnTopUI();
 
       // Refresh dynamic submenu state (tracks) on open so labels/checkmarks stay accurate.
+      // FIX_BATCH3: Gate the callback on ctxMenuOpen to avoid stale cache writes
+      // if the user closes the menu before the async refresh completes.
       safe(() => {
         try {
-          return refreshTracksFromPlayer().then(() => { try { populateContextMenuSubmenus(); } catch {} });
+          return refreshTracksFromPlayer().then(() => { try { if (ctxMenuOpen) populateContextMenuSubmenus(); } catch {} });
         } catch {}
       });
     } catch (err) {
@@ -1912,7 +1879,7 @@ function setTransformsUiVisible(visible){
 function normalizeAspectMode(raw){
   const v = (raw == null) ? '' : String(raw).trim();
   if (!v || v === 'no' || v === '-1' || v === '0') return 'auto';
-  const known = ['16:9','4:3','1:1','21:9'];
+  const known = ['16:9','4:3','1:1','21:9','2.35:1'];
   for (const k of known) {
     if (v === k) return k;
     if (v.replace(/\s+/g,'') === k) return k;
@@ -1993,9 +1960,9 @@ async function refreshTransformsFromPlayer(){
     if (selectedValue) {
       selectEl.value = selectedValue;
     } else if (allowOff) {
-      // Default-to-ON: if subtitles exist, pick the first real track instead of Off.
-      const firstReal = options.find(o => o && o.value && o.value !== 'no');
-      selectEl.value = firstReal ? firstReal.value : 'no';
+      // FIX_BATCH6: Default to 'no' (Off) when no track is selected by the player,
+      // matching mpv's actual state instead of guessing (C16-P2).
+      selectEl.value = 'no';
     }
   }
 
@@ -2023,7 +1990,7 @@ async function refreshTransformsFromPlayer(){
           // MPV can take a moment to populate track-list right after load.
           if (res && typeof res === 'object' && Array.isArray(res.tracks) && res.tracks.length) return res;
           if (i < tries - 1) await wait(delayMs);
-          return (res && typeof res === 'object') ? res : { tracks: [], selectedId: null };
+          if (i === tries - 1) return (res && typeof res === 'object') ? res : { tracks: [], selectedId: null };
         } catch (err) {
           lastErr = err;
           if (i < tries - 1) await wait(delayMs);
@@ -2377,7 +2344,7 @@ function closeTracksPanel(){
 
     const diagnosticsOn = !!(el.videoDiagnostics && !el.videoDiagnostics.classList.contains('hidden'));
     // BUILD71: Don't close context menu - just skip hide timer when it's open
-    if (ctxMenuOpen || playlistPanelOpen || tracksPanelOpen || volPanelOpen || diagnosticsOn || state.seekDragging || state._pointerOverControls) {
+    if (ctxMenuOpen || playlistPanelOpen || tracksPanelOpen || speedPanelOpen || volPanelOpen || diagnosticsOn || state.seekDragging || state._pointerOverControls) {
       if (state.hudHideTimer) clearTimeout(state.hudHideTimer);
       return;
     }
@@ -2397,12 +2364,22 @@ function closeTracksPanel(){
             return s2 ? !s2.paused : false;
           } catch { return false; }
         })();
-        const anyOverlay = playlistPanelOpen || tracksPanelOpen || volPanelOpen || diagnosticsOn || state.seekDragging || state._pointerOverControls;
+        const anyOverlay = playlistPanelOpen || tracksPanelOpen || speedPanelOpen || volPanelOpen || diagnosticsOn || state.seekDragging || state._pointerOverControls;
         if (fullscreen && stillPlaying && !anyOverlay) {
           try { el.videoStage?.classList.add('hideCursor'); } catch {}
         }
       }, HIDE_TIMEOUT_MS);
     }
+  }
+
+  function closeHud(){
+    if (!el.videoStage) return;
+    if (state.hudHideTimer) {
+      clearTimeout(state.hudHideTimer);
+      state.hudHideTimer = null;
+    }
+    el.videoStage.classList.remove('showHud');
+    try { el.videoStage.classList.add('hideCursor'); } catch {}
   }
 
   function hideHudSoon(){
@@ -2412,7 +2389,7 @@ function closeTracksPanel(){
 
     const diagnosticsOn = !!(el.videoDiagnostics && !el.videoDiagnostics.classList.contains('hidden'));
     // BUILD71: Don't close context menu - just skip hiding when it's open
-    if (ctxMenuOpen || playlistPanelOpen || tracksPanelOpen || volPanelOpen || diagnosticsOn || state.seekDragging || state._pointerOverControls) return;
+    if (ctxMenuOpen || playlistPanelOpen || tracksPanelOpen || speedPanelOpen || volPanelOpen || diagnosticsOn || state.seekDragging || state._pointerOverControls) return;
 
     if (state.hudHideTimer) clearTimeout(state.hudHideTimer);
     state.hudHideTimer = setTimeout(() => {
@@ -2420,7 +2397,7 @@ function closeTracksPanel(){
       const fullscreen = document.body.classList.contains('videoFullscreen');
       const st = state.player?.getState?.();
       const playing = st ? !st.paused : false;
-      const anyOverlay = playlistPanelOpen || tracksPanelOpen || volPanelOpen || diagnosticsOn || state.seekDragging || state._pointerOverControls;
+      const anyOverlay = playlistPanelOpen || tracksPanelOpen || speedPanelOpen || volPanelOpen || diagnosticsOn || state.seekDragging || state._pointerOverControls;
       if (fullscreen && playing && !anyOverlay) {
         try { el.videoStage?.classList.add('hideCursor'); } catch {}
       }
@@ -2910,6 +2887,39 @@ function saveSetting(key, value){
     persistVideoUiState();
   }
 
+  function parentVideoFolderRel(relPath) {
+    const parts = String(relPath || '')
+      .replace(/\\/g, '/')
+      .replace(/^\/+|\/+$/g, '')
+      .split('/')
+      .filter(Boolean);
+    if (!parts.length) return '';
+    parts.pop();
+    return parts.join('/');
+  }
+
+  function backOneVideoStep(opts = {}) {
+    const allowModeSwitch = opts.allowModeSwitch !== false;
+    if (state.mode !== 'videos') {
+      if (allowModeSwitch) setMode('comics');
+      return;
+    }
+    if (document.body.classList.contains('inVideoPlayer')) {
+      closeOrBackFromPlayer();
+      return;
+    }
+    if (state.videoSubView === 'show') {
+      const currentRel = String(state.epFolderRel || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      if (currentRel) {
+        navigateShowFolder(parentVideoFolderRel(currentRel));
+        return;
+      }
+      goVideoHome();
+      return;
+    }
+    if (allowModeSwitch) setMode('comics');
+  }
+
 
 
 async function ensureShowEpisodesLoaded(showId){
@@ -3217,7 +3227,7 @@ function ensureContinueEpisodesLoaded() {
   el.videoFoldersList.innerHTML = '';
 
   const allBtn = document.createElement('button');
-  allBtn.className = 'navBtn';
+  allBtn.className = `navBtn${state.selectedRootId ? '' : ' active'}`;
   allBtn.textContent = 'All videos';
   allBtn.onclick = () => { state.selectedRootId = null; goVideoHome(); };
   el.videoFoldersList.appendChild(allBtn);
@@ -3283,8 +3293,11 @@ function ensureContinueEpisodesLoaded() {
 
     // Sidebar parity: use the Comic Library folder item markup + tokens.
     // IMPORTANT: keep underlying click/expand/remove behavior identical.
-    const row = document.createElement('button');
-    row.type = 'button';
+    // FIX_BATCH5: Changed from <button> to <div> with role="button" to avoid
+    // invalid nested interactive content (remove button was inside this button).
+    const row = document.createElement('div');
+    row.setAttribute('role', 'button');
+    row.tabIndex = 0;
     row.className = `folderItem${(rid && String(state.selectedRootId || '') === rid) ? ' active' : ''}`;
 
     // Twisty in the icon slot: expand/collapse (persisted via video UI state)
@@ -3327,7 +3340,7 @@ function ensureContinueEpisodesLoaded() {
     row.appendChild(count);
     row.appendChild(remove);
 
-    row.addEventListener('click', () => {
+    const activateRootRow = () => {
       // IMPORTANT: do not recompute ids in renderer; use stable ids produced upstream.
       state.selectedRootId = r.id || null;
       if (rid) {
@@ -3337,6 +3350,15 @@ function ensureContinueEpisodesLoaded() {
       goVideoHome();
       renderVideoFolders();
       persistVideoUiState();
+    };
+    row.addEventListener('click', activateRootRow);
+    row.addEventListener('keydown', (e) => {
+      const key = String(e?.key || '');
+      if (key === 'Enter' || key === ' ' || key === 'Spacebar') {
+        e.preventDefault();
+        e.stopPropagation();
+        activateRootRow();
+      }
     });
 
     // Stage 1: Root folder context menu (Rescan / Reveal / Remove).
@@ -3348,17 +3370,27 @@ function ensureContinueEpisodesLoaded() {
 
       openCtxMenu(e, [
         {
-          label: 'Rescan',
+          label: 'Rescan all videos',
           onClick: async () => {
-            try { await Tanko.api.video.scan({ force: true }); } catch {}
-            toast('Refreshing…');
+            try {
+              await Tanko.api.video.scan({ force: true });
+              toast('Rescanning videos...', 1200);
+            } catch (err) {
+              console.error('Failed to rescan videos:', err);
+              toast('Rescan failed', 2000);
+            }
           },
         },
         {
           label: 'Reveal',
           disabled: (typeof Tanko?.api?.shell?.revealPath !== 'function'),
           onClick: async () => {
-            try { await Tanko.api.shell.revealPath(r.path); } catch {}
+            try {
+              await Tanko.api.shell.revealPath(r.path);
+            } catch (err) {
+              console.error('Failed to reveal root path:', err);
+              toast('Reveal failed', 2000);
+            }
           },
         },
         { separator: true },
@@ -4335,7 +4367,9 @@ function buildPotLikeLeftClickMenuItems(){
   items.push({
     label: 'Volume +',
     onClick: () => {
-      const cur = Number.isFinite(st.volume) ? Number(st.volume) : Number(state.settings.volume || 1);
+      // FIX_BATCH3: Read fresh volume from player state instead of closed-over snapshot
+      const fresh = state.player?.getState?.() || {};
+      const cur = Number.isFinite(fresh.volume) ? Number(fresh.volume) : Number(state.settings.volume || 1);
       const nextV = clamp(cur + 0.05, 0, 1);
       if (typeof queueVolumeToPlayer === 'function') queueVolumeToPlayer(nextV);
       else state.player?.setVolume?.(nextV);
@@ -4349,7 +4383,9 @@ function buildPotLikeLeftClickMenuItems(){
   items.push({
     label: 'Volume −',
     onClick: () => {
-      const cur = Number.isFinite(st.volume) ? Number(st.volume) : Number(state.settings.volume || 1);
+      // FIX_BATCH3: Read fresh volume from player state instead of closed-over snapshot
+      const fresh = state.player?.getState?.() || {};
+      const cur = Number.isFinite(fresh.volume) ? Number(fresh.volume) : Number(state.settings.volume || 1);
       const nextV = clamp(cur - 0.05, 0, 1);
       if (typeof queueVolumeToPlayer === 'function') queueVolumeToPlayer(nextV);
       else state.player?.setVolume?.(nextV);
@@ -4732,11 +4768,17 @@ function getEpisodeById(epId){
         },
       },
       {
-        label: 'Rescan this show',
+        label: 'Rescan this show (full scan)',
+        disabled: (typeof Tanko?.api?.video?.scanShow !== 'function'),
         onClick: async () => {
           try {
-            await Tanko.api.video.scanShow(showPath);
-            toast('Refreshing show…');
+            const res = await Tanko.api.video.scanShow(showPath);
+            if (res && res.ok === false) {
+              toast('Rescan failed', 2000);
+              return;
+            }
+            if (res && res.scoped === true) toast('Refreshing show...', 1200);
+            else toast('Rescanning videos...', 1200);
           } catch (err) {
             console.error('Failed to rescan show:', err);
             toast('Rescan failed', 2000);
@@ -4748,15 +4790,24 @@ function getEpisodeById(epId){
         label: 'Reveal in File Explorer',
         disabled: (typeof Tanko?.api?.shell?.revealPath !== 'function'),
         onClick: async () => {
-          try { await Tanko.api.shell.revealPath(showPath); } catch {}
+          try {
+            await Tanko.api.shell.revealPath(showPath);
+          } catch (err) {
+            console.error('Failed to reveal show path:', err);
+            toast('Reveal failed', 2000);
+          }
         },
       },
       {
         label: 'Copy path',
-        onClick: () => {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(showPath);
+        disabled: (typeof Tanko?.api?.clipboard?.copyText !== 'function'),
+        onClick: async () => {
+          try {
+            await Tanko.api.clipboard.copyText(showPath);
             toast('Path copied', 1200);
+          } catch (err) {
+            console.error('Failed to copy show path:', err);
+            toast('Copy failed', 2000);
           }
         },
       },
@@ -7202,17 +7253,12 @@ function adjustVolume(delta){
       state.player.on('loadedmetadata', () => { updateHudFromPlayer(); safe(() => refreshChaptersFromPlayer()); });
       state.player.on('duration', () => { updateHudFromPlayer(); safe(() => refreshChaptersFromPlayer()); });
       
-      // BUILD 89 FIX 2: Also try refreshing chapters on file-loaded with a slight delay
+      // BUILD 89: Also refresh chapters on file-loaded with a slight delay
       // to ensure mpv has fully parsed the file metadata
       state.player.on('file-loaded', () => {
-        console.log('[BUILD89 CHAPTERS] file-loaded event received');
         updateHudFromPlayer();
         safe(() => {
-          // Small delay to let mpv finish loading all metadata
-          setTimeout(() => {
-            console.log('[BUILD89 CHAPTERS] Delayed chapter refresh after file-loaded');
-            refreshChaptersFromPlayer();
-          }, 500);
+          setTimeout(() => { refreshChaptersFromPlayer(); }, 500);
         });
       });
       
@@ -7285,69 +7331,33 @@ function adjustVolume(delta){
     let lastContextMenuTime = 0;
     const CONTEXT_MENU_COOLDOWN_MS = 300; // Prevent rapid re-opening
 
-    // BUILD 67: Enhanced diagnostics for right-click context menu debugging
+    // FIX_BATCH5: Removed BUILD67/BUILD69 verbose debug logging.
     function handleCanvasContextMenu(e) {
-      console.log('[BUILD69 CTX] handleCanvasContextMenu called');
-      if (!e) {
-        console.log('[BUILD69 CTX] No event object');
-        return;
-      }
-      if (state.mode !== 'videos') {
-        console.log('[BUILD69 CTX] Not in videos mode, mode =', state.mode);
-        return;
-      }
-      if (el.videoPlayerView && el.videoPlayerView.classList.contains('hidden')) {
-        console.log('[BUILD69 CTX] Player view is hidden');
-        return;
-      }
-
-      console.log('[video] BUILD67 contextmenu event:', {
-        target: e.target ? (e.target.id || e.target.className || e.target.tagName) : 'null',
-        currentTarget: e.currentTarget ? (e.currentTarget.id || e.currentTarget.className) : 'null',
-        clientX: e.clientX,
-        clientY: e.clientY,
-        button: e.button,
-        buttons: e.buttons,
-        defaultPrevented: e.defaultPrevented,
-        bubbles: e.bubbles,
-        cancelable: e.cancelable
-      });
+      if (!e) return;
+      if (state.mode !== 'videos') return;
+      if (el.videoPlayerView && el.videoPlayerView.classList.contains('hidden')) return;
 
       // Let native behavior win for actual form controls
       const t = e.target;
       const tag = t && t.tagName ? String(t.tagName).toUpperCase() : '';
-      if (tag === 'BUTTON' || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
-        console.log('[BUILD69 CTX] Ignoring - target is form control');
-        return;
-      }
+      if (tag === 'BUTTON' || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
       // Cooldown guard (and avoids multi-trigger when multiple surfaces are bound)
       const now = Date.now();
-      if (now - lastContextMenuTime < CONTEXT_MENU_COOLDOWN_MS) {
-        console.log('[video] Rejected: cooldown active');
-        return;
-      }
+      if (now - lastContextMenuTime < CONTEXT_MENU_COOLDOWN_MS) return;
       lastContextMenuTime = now;
 
       try {
         e.preventDefault();
         e.stopPropagation();
-        console.log('[BUILD69 CTX] Event prevented successfully');
-      } catch (err) {
-        console.error('[video] Failed to prevent default:', err);
-      }
+      } catch {}
 
       // Always show HUD when opening the menu
       showHud();
-
-      console.log('[BUILD69 CTX] Calling openVideoCtxMenu at', e.clientX, e.clientY);
       openVideoCtxMenu(e.clientX || 0, e.clientY || 0);
-      console.log('[video] Context menu opened at:', e.clientX, e.clientY);
     }
 
     function attachContextMenuCanvas() {
-      console.log('[video] BUILD67 Attaching context menu handlers (canvas mode)');
-      
       // Clean up any existing listeners (safe even if never bound)
       try {
         el.videoStage?.removeEventListener('contextmenu', handleCanvasContextMenu);
@@ -7357,56 +7367,37 @@ function adjustVolume(delta){
         c?.removeEventListener?.('contextmenu', handleCanvasContextMenu);
       } catch {}
 
-      const attach = (node, label) => {
-        if (!node) {
-          console.log(`[video] Skipping ${label}: element not found`);
-          return;
-        }
+      const attach = (node) => {
+        if (!node) return;
         try {
-          node.addEventListener('contextmenu', handleCanvasContextMenu, { 
+          node.addEventListener('contextmenu', handleCanvasContextMenu, {
             passive: false,
             capture: true  // Build 67: Use capture to catch early
           });
-          console.log(`[video] Attached contextmenu to ${label}:`, node.id || node.className || node.tagName);
-        } catch (err) {
-          console.error(`[video] Failed to attach to ${label}:`, err);
-        }
+        } catch {}
       };
 
       // Attach to all relevant elements in canvas mode
-      attach(el.videoStage, 'videoStage');
-      attach(el.mpvHost, 'mpvHost');
-      attach(el.videoPlayerView, 'videoPlayerView');
+      attach(el.videoStage);
+      attach(el.mpvHost);
+      attach(el.videoPlayerView);
       const canvas = el.mpvHost?.querySelector?.('canvas');
-      attach(canvas, 'canvas');
-      
+      attach(canvas);
+
       // Build 67: Also try HUD overlay (might be intercepting)
-      attach(el.videoHud, 'videoHud');
-      
-      // BUILD 69: Add fallback document-level handler to ensure it works everywhere
+      attach(el.videoHud);
+
+      // BUILD 69: Fallback document-level handler to ensure it works everywhere
       document.addEventListener('contextmenu', (e) => {
-        // Only handle if we're in videos mode and in player
         if (state.mode !== 'videos') return;
         if (!document.body.classList.contains('inVideoPlayer')) return;
-        
-        // Check if the event target is within the video player view
         const target = e.target;
         if (!target) return;
-        
-        // Don't intercept clicks on the actual context menu itself
         if (el.videoCtxMenu && el.videoCtxMenu.contains(target)) return;
-        
-        // Check if target is inside video player
         const inPlayerView = el.videoPlayerView && el.videoPlayerView.contains(target);
         const inStage = el.videoStage && el.videoStage.contains(target);
-        
-        if (inPlayerView || inStage) {
-          console.log('[BUILD69 CTX] Document-level handler triggered');
-          handleCanvasContextMenu(e);
-        }
+        if (inPlayerView || inStage) handleCanvasContextMenu(e);
       }, { capture: true, passive: false });
-      
-      console.log('[video] Context menu attachment complete');
     }
 
     const isCanvasMode = !!(document.body && document.body.classList && document.body.classList.contains('libmpvCanvas'));
@@ -7544,13 +7535,7 @@ function adjustVolume(delta){
       }
       
       if (act === 'stop') {
-        if (state.player) {
-          try {
-            await state.player.pause?.();
-            await state.player.seekTo?.(0);
-            showHud();
-          } catch {}
-        }
+        closeOrBackFromPlayer();
         return;
       }
       
@@ -7668,6 +7653,8 @@ function adjustVolume(delta){
           try {
             await state.player.setAudioDelay(0);
             cachedAudioDelaySec = 0;
+            syncDelayUi();
+            schedulePlaybackPreferencesSave();
             hudNotice('Audio delay reset');
             showHud();
           } catch {}
@@ -7690,6 +7677,8 @@ function adjustVolume(delta){
           try {
             await state.player.setSubtitleDelay(0);
             cachedSubtitleDelaySec = 0;
+            syncDelayUi();
+            schedulePlaybackPreferencesSave();
             hudNotice('Subtitle delay reset');
             showHud();
           } catch {}
@@ -8486,7 +8475,20 @@ el.videoResetTransformsBtn?.addEventListener('click', () => {
     el.videoRestartBtn?.addEventListener('click', () => resumeChoice('restart'));
   }
 
-  
+  function hideResumePrompt(){
+    try { el.videoResumePrompt?.classList.add('hidden'); } catch {}
+    try { if (el.videoResumeText) el.videoResumeText.textContent = '—'; } catch {}
+  }
+
+  function resumeChoice(which){
+    // Resume prompt is not actively used in Qt-only flow, but keep handlers safe.
+    if (which === 'restart') {
+      state._suppressResumePromptOnce = true;
+      state._resumeOverridePosSec = 0;
+    }
+    hideResumePrompt();
+  }
+
 function bindKeyboard(){
     const parseTimeToSeconds = (raw) => {
       const s = String(raw || '').trim();
@@ -8664,7 +8666,7 @@ function bindKeyboard(){
       if (state.mode !== 'videos') return;
 
       const tag = (e.target && e.target.tagName) ? String(e.target.tagName).toLowerCase() : '';
-      if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return;
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;
 
       const key = String(e.key || '');
       const lower = key.toLowerCase();
@@ -8673,22 +8675,7 @@ function bindKeyboard(){
       if (key === 'Backspace') {
         e.preventDefault();
         e.stopPropagation();
-        
-        const inPlayer = document.body.classList.contains('inVideoPlayer');
-        
-        // If in player, go back to library/show
-        if (inPlayer) {
-          closeOrBackFromPlayer();
-          return;
-        }
-        
-        // If in show view, go back to home
-        if (state.videoSubView === 'show') {
-          goVideoHome();
-          return;
-        }
-        
-        // Already at library home, do nothing
+        backOneVideoStep();
         return;
       }
 
@@ -8725,7 +8712,9 @@ function bindKeyboard(){
         if (ctxMenuOpen) { closeVideoCtxMenu(); showHud(); return; }
         if (diagnosticsOn) { setDiagnosticsVisible(false); showHud(); return; }
         if (playlistPanelOpen) { closePlaylistPanel(); showHud(); return; }
-        if (tracksPanelOpen) { closeTracksPanel(); showHud(); return; }        if (volPanelOpen) { closeVolPanel(); showHud(); return; }
+        if (tracksPanelOpen) { closeTracksPanel(); showHud(); return; }
+        if (speedPanelOpen) { closeSpeedPanel(); showHud(); return; }
+        if (volPanelOpen) { closeVolPanel(); showHud(); return; }
         closeHud();
         return;
       }
@@ -8929,7 +8918,7 @@ function bindKeyboard(){
       if (!inPlayer) return;
 
       const tag = (e.target && e.target.tagName) ? String(e.target.tagName).toLowerCase() : '';
-      if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return;
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;
 
       const key = String(e.key || '');
       if (key === ' ' || key === 'Enter') {
@@ -8982,9 +8971,13 @@ function bindKeyboard(){
                   const helpers = {
                     setMode: (m) => setMode(m),
                     openVideoShow: (sid) => openVideoShow(sid),
+                    navigateShowFolder: (rel) => navigateShowFolder(rel),
+                    selectEpisode: (id) => selectEpisode(id),
                   };
                   await stateModule.restoreState(result.state, state, helpers);
                 }
+                // Prevent stale state from replaying after subsequent exits.
+                try { await api.build14.clearReturnState?.(); } catch {}
               }
             }
             // BUILD16: If main process synced Qt progress on exit, merge it into renderer cache immediately.
@@ -9079,7 +9072,7 @@ function bindKeyboard(){
     });
 
     el.videoShowBackBtn?.addEventListener('click', () => {
-      goVideoHome();
+      backOneVideoStep({ allowModeSwitch: false });
     });
 
     el.videoEpOpenBtn?.addEventListener('click', () => {
@@ -9233,21 +9226,6 @@ function bindKeyboard(){
           const p = payload && typeof payload === 'object' ? payload : { video: payload };
           const v = (p.video && typeof p.video === 'object') ? p.video : null;
           if (!v || !v.path) return;
-
-          // Tankoban Pro V2: Optional external Qt player (file-based progress bridge).
-          // Enable by setting localStorage key: tankobanUseQtPlayer = '1'
-          // NOTE: This handler is not async; do not use await here.
-          try {
-            const useQt = (typeof localStorage !== 'undefined' && localStorage.getItem('tankobanUseQtPlayer') === '1');
-            const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
-            if (useQt && api && api.player && typeof api.player.launchQt === 'function') {
-              const sessionId = String(Date.now());
-              const start = (p && Number.isFinite(Number(p.resumeOverridePosSec))) ? Number(p.resumeOverridePosSec) : 0;
-              try { toast('Opening in Qt player…', 1200); } catch {}
-              try { api.player.launchQt({ filePath: String(v.path), startSeconds: start, sessionId }); } catch {}
-              return;
-            }
-          } catch {}
           safe(() => openVideo(v, p));
         });
       }
@@ -9265,6 +9243,62 @@ function bindKeyboard(){
   let videoGlobalSearchItems = [];
   let videoSearchIndex = null;
   let videoSearchIndexGeneration = 0;
+
+  // FIX_BATCH3: Moved from video_utils.js — these helpers need access to video.js-internal
+  // state (videoGlobalSearchItems, appState, openVideoShow, getEpisodeById, openVideo).
+  function videoHideGlobalSearchResults(){
+    const resultsEl = document.getElementById('globalSearchResults');
+    if (resultsEl) {
+      resultsEl.classList.add('hidden');
+      resultsEl.innerHTML = '';
+    }
+    videoGlobalSearchItems = [];
+  }
+
+  function videoSetGlobalSearchSelection(idx){
+    const resultsEl = document.getElementById('globalSearchResults');
+    const items = Array.from(resultsEl?.querySelectorAll?.('.resItem') || []);
+    if (!items.length) {
+      if (appState?.ui) appState.ui.globalSearchSel = 0;
+      return;
+    }
+    const max = items.length - 1;
+    const next = Math.max(0, Math.min(max, Number(idx || 0)));
+    if (appState?.ui) appState.ui.globalSearchSel = next;
+
+    for (const it of items) {
+      it.classList.toggle('sel', Number(it.dataset.idx) === next);
+    }
+    const sel = items.find(it => Number(it.dataset.idx) === next);
+    try { sel?.scrollIntoView?.({ block: 'nearest' }); } catch {}
+  }
+
+  async function videoActivateGlobalSearchSelection(){
+    const sel = Number(appState?.ui?.globalSearchSel || 0);
+    const item = videoGlobalSearchItems[sel];
+
+    const gs = document.getElementById('globalSearch');
+    if (gs) {
+      gs.value = '';
+      gs.blur();
+    }
+    if (appState?.ui) appState.ui.globalSearch = '';
+
+    videoHideGlobalSearchResults();
+
+    if (!item) return;
+
+    if (item.type === 'show') {
+      openVideoShow(item.showId);
+      return;
+    }
+
+    if (item.type === 'episode') {
+      const ep = getEpisodeById(item.episodeId);
+      if (ep) await openVideo(ep);
+      return;
+    }
+  }
 
   function videoSearchNorm(s) {
     return String(s || '').toLowerCase();
@@ -9411,7 +9445,9 @@ function bindKeyboard(){
         for (const t of qTokens) if (entry.tokens.has(t)) score += 12;
         return score;
       },
-    }).sort((a, b) => _videoNatCmp(String(a?.name || ''), String(b?.name || '')));
+    });
+    // FIX_BATCH3: Removed alphabetical post-sort that was overriding relevance ranking.
+    // videoSearchFromIndex already returns results sorted by score descending.
 
     const episodes = videoSearchFromIndex({
       q,
@@ -9428,17 +9464,8 @@ function bindKeyboard(){
         for (const t of qTokens) if (entry.tokens.has(t)) score += 10;
         return score;
       },
-    }).sort((a, b) => {
-      const asn = String(getShowById(a?.showId)?.name || '');
-      const bsn = String(getShowById(b?.showId)?.name || '');
-      const c1 = _videoNatCmp(asn, bsn);
-      if (c1) return c1;
-      const at = String(a?.title || basename(String(a?.path || '')));
-      const bt = String(b?.title || basename(String(b?.path || '')));
-      const c2 = _videoNatCmp(at, bt);
-      if (c2) return c2;
-      return String(a?.path || '').localeCompare(String(b?.path || ''));
     });
+    // FIX_BATCH3: Removed alphabetical post-sort (same as above).
 
     resultsEl.innerHTML = '';
     videoGlobalSearchItems = [];
@@ -9525,6 +9552,12 @@ function bindKeyboard(){
   // Item 5: Allow the shared Clear Continue button to refresh video resume state.
   function setAllVideoProgress(next){
     state.progress = (next && typeof next === 'object') ? next : {};
+    // FIX_BATCH3: Also clear last-active episode memory so continue tiles
+    // don't repopulate from stale last-opened state after a full clear.
+    if (!next || !Object.keys(next).length) {
+      state.lastActiveEpisodeByShowId = {};
+      safe(() => persistVideoUiState());
+    }
     rerenderVideoAfterProgress();
   }
   // Expose a tiny bridge so the existing top bar Refresh button can work in video mode.
@@ -9536,10 +9569,7 @@ function bindKeyboard(){
       if (state.mode === 'videos') safe(() => Tanko.api.video.scan({ force: true }));
     },
     back: () => {
-      if (state.mode !== 'videos') { setMode('comics'); return; }
-      if (document.body.classList.contains('inVideoPlayer')) { try { const p = saveNow(true); if (p && typeof p.then === 'function') p.catch(() => {}); } catch {} showVideoLibrary(); return; }
-      if (state.videoSubView === 'show') { goVideoHome(); return; }
-      setMode('comics');
+      backOneVideoStep();
     },
     toggleThumbs: () => {
       if (state.mode === 'videos') safe(() => toggleVideoShowThumbs());

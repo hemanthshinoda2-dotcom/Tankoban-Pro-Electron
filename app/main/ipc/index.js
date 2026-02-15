@@ -189,7 +189,10 @@ function writeJSONDebounced(p, obj, delayMs = 150) {
     timer: setTimeout(() => {
       const cur = debouncedJSONWrites.get(p);
       if (!cur) return;
-      try { writeJSONSafe(p, cur.latestObj); } catch {}
+      try { writeJSONSafe(p, cur.latestObj); } catch (err) {
+        // FIX_BATCH4: Log debounced write failures instead of silently swallowing
+        try { console.error('[ipc] Debounced write failed:', p, err?.message || err); } catch {}
+      }
       debouncedJSONWrites.delete(p);
     }, delayMs),
   });
@@ -711,15 +714,19 @@ function emitLibraryUpdated() {
 function pruneProgressByRemovedBookIds(removedIds) {
   // INTENT: Only delete progress entries for books that were removed from the library index.
   // This preserves Open File (external) progress that is not part of the library.
+  // FIX_BATCH4: Use progress._getProgressMem(ctx) instead of undefined getProgressMem().
+  // Use ctx.storage.writeJSONDebounced so the write is covered by before-quit flush.
   try {
     if (!removedIds || !removedIds.length) return;
-    const all = getProgressMem();
+    const all = progress._getProgressMem(ctx);
     let changed = false;
     for (const id of removedIds) {
       if (all && all[id]) { delete all[id]; changed = true; }
     }
-    if (changed) writeJSONDebounced(dataPath('progress.json'), all, 50);
-  } catch {}
+    if (changed) ctx.storage.writeJSONDebounced(ctx.storage.dataPath('progress.json'), all, 50);
+  } catch (err) {
+    console.error('[pruneProgress] Error:', err);
+  }
 }
 
 // BUILD27_SCAN_IGNORE_DEFAULTS
@@ -1016,9 +1023,11 @@ function createWindow(opts = {}) {
     try { windows.delete(w); } catch {}
 
     // BUILD32_CBZ_WINDOW_CLEANUP (Build 32)
-    // Best-effort: close any CBZ sessions opened by this renderer window.
+    // Best-effort: close any CBZ/CBR sessions opened by this renderer window.
+    // FIX_BATCH6: Added CBR cleanup parity (C09-P0-2).
     (async () => {
       try { await archivesDomain.cbzCloseAllForOwner(cbzOwnerId); } catch {}
+      try { await archivesDomain.cbrCloseAllForOwner(cbzOwnerId); } catch {}
     })();
 
     (async () => {
@@ -1047,7 +1056,8 @@ function createWindow(opts = {}) {
   // INTENT: Let a new window boot directly into a volume by passing openBookId via query string.
   const query = {};
   if (debug) query.debug = '1';
-  if (openBookId) query.openBookId = openBookId;
+  // Keep current key aligned with main/index.js. Renderer also tolerates legacy openBookId.
+  if (openBookId) query.book = openBookId;
 
   w.__tankobanDidFinishLoad = false;
 

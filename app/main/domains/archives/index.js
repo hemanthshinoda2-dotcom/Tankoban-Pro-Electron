@@ -293,7 +293,7 @@ async function cbzCloseInternal(sessionId) {
  * BUILD 19E_CBR_LAZY_MAIN_IPC (Build 19E)
  * Lifted from Build 78A index.js lines 341-370.
  */
-async function cbrOpenInternal(filePath) {
+async function cbrOpenInternal(filePath, ownerId) {
   const fp = String(filePath || '');
   if (!fp) throw new Error('Missing CBR path');
 
@@ -318,7 +318,8 @@ async function cbrOpenInternal(filePath) {
   } catch {}
 
   const sessionId = String(cbrSessionSeq++);
-  cbrSessions.set(sessionId, { dataAB, extractor, entries: names, path: fp, openedAt: Date.now() });
+  // FIX_BATCH6: Track ownerId for per-window cleanup parity with CBZ (C09-P0-2).
+  cbrSessions.set(sessionId, { dataAB, extractor, entries: names, path: fp, ownerId, openedAt: Date.now() });
   cbrEvictIfNeeded();
 
   return { sessionId, entries: names.map(name => ({ name })) };
@@ -359,15 +360,34 @@ async function cbrCloseInternal(sessionId) {
   cbrSessions.delete(sid);
 }
 
+/**
+ * FIX_BATCH6: Close all CBR sessions for a given owner (window).
+ * Parity with cbzCloseAllForOwner (C09-P0-2).
+ */
+async function cbrCloseAllForOwner(ownerId) {
+  const oid = Number(ownerId) || 0;
+  const toClose = [];
+  try {
+    for (const [sid, s] of cbrSessions.entries()) {
+      if ((Number(s?.ownerId) || 0) === oid) toClose.push(String(sid));
+    }
+  } catch {}
+  for (const sid of toClose) {
+    try { await cbrCloseInternal(sid); } catch {}
+  }
+}
+
 // ========== DOMAIN HANDLERS ==========
 
 /**
  * Open CBR file.
  * Lifted from Build 78A index.js lines 2202-2209.
  */
-async function cbrOpen(ctx, _evt, filePath) {
+async function cbrOpen(ctx, evt, filePath) {
   try {
-    const out = await cbrOpenInternal(filePath);
+    // FIX_BATCH6: Pass ownerId for per-window cleanup parity with CBZ (C09-P0-2).
+    const ownerId = evt?.sender?.id;
+    const out = await cbrOpenInternal(filePath, ownerId);
     return { ok: true, sessionId: out.sessionId, entries: out.entries };
   } catch (err) {
     return { ok: false, error: String(err?.message || err) };
@@ -378,13 +398,9 @@ async function cbrOpen(ctx, _evt, filePath) {
  * Read entry from CBR file.
  * Lifted from Build 78A index.js lines 2211-2218.
  */
+// FIX_BATCH7: Let errors propagate (matching CBZ contract) instead of returning null (C09-P1-3).
 async function cbrReadEntry(ctx, _evt, sessionId, entryIndex) {
-  try {
-    const ab = await cbrReadEntryInternal(sessionId, entryIndex);
-    return ab;
-  } catch {
-    return null;
-  }
+  return cbrReadEntryInternal(sessionId, entryIndex);
 }
 
 /**
@@ -436,4 +452,5 @@ module.exports = {
   
   // Utility exports (for window cleanup in main registry)
   cbzCloseAllForOwner,
+  cbrCloseAllForOwner,
 };
